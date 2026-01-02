@@ -8,10 +8,6 @@
 #property indicator_buffers 4
 #property indicator_plots   2
 
-//--- PROTECTION DE LICENCE ---
-#include <LicenseValidator.mqh>
-//-----------------------------
-
 //--- Définition des propriétés des plots
 #property indicator_type1   DRAW_ARROW
 #property indicator_color1  clrLime
@@ -20,6 +16,154 @@
 #property indicator_type2   DRAW_ARROW
 #property indicator_color2  clrRed
 #property indicator_width2  3
+
+//--- Inputs
+input string            LICENSE_KEY = "TRENDCATCHER_LICENCE_VALIDATOR"; // 🔑 CLÉ DE LICENCE
+input int               EMA_Fast = 2;            // Fast EMA Period
+input int               EMA_Slow = 9;            // Slow EMA Period
+input bool              ShowSignals = true;      // Show Signals
+input bool              ShowDashboard = true;    // Show Dashboard
+input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
+
+//--- URL Serveur de validation
+// ⚠️ IMPORTANT : URL Render
+string SERVER_URL = "https://licence-indicator-server.onrender.com/api/validate"; 
+
+//+------------------------------------------------------------------+
+//| Classe de validation de licence (INTÉGRÉE DIRECTEMENT)          |
+//+------------------------------------------------------------------+
+class CLicenseValidator
+{
+private:
+    string m_licenseKey;
+    string m_serverUrl;
+    datetime m_lastValidation;
+    bool m_isValid;
+    string m_errorMessage;
+    int m_validationInterval;
+    
+    // Informations du compte
+    string m_accountNumber;
+    string m_accountName;
+    string m_serverName;
+    
+public:
+    //+------------------------------------------------------------------+
+    //| Constructeur                                                      |
+    //+------------------------------------------------------------------+
+    CLicenseValidator(string licenseKey, string serverUrl, int interval = 3600)
+    {
+        m_licenseKey = licenseKey;
+        m_serverUrl = serverUrl;
+        m_validationInterval = interval;
+        m_lastValidation = 0;
+        m_isValid = false;
+        m_errorMessage = "";
+        
+        // Récupérer les informations du compte
+        m_accountNumber = IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+        m_accountName = AccountInfoString(ACCOUNT_NAME);
+        m_serverName = AccountInfoString(ACCOUNT_SERVER);
+    }
+    
+    //+------------------------------------------------------------------+
+    //| Valider la licence                                               |
+    //+------------------------------------------------------------------+
+    bool Validate(bool forceValidation = false)
+    {
+        // Vérifier si une validation est nécessaire
+        datetime currentTime = TimeCurrent();
+        
+        if(!forceValidation && m_isValid && (currentTime - m_lastValidation) < m_validationInterval)
+        {
+            return true; // Utiliser le cache
+        }
+        
+        // Vérifier que la clé de licence est définie
+        if(m_licenseKey == "" || m_licenseKey == "VOTRE-CLE-DE-LICENCE")
+        {
+            m_isValid = false;
+            m_errorMessage = "Clé de licence non configurée";
+            Print("❌ ERREUR: Veuillez configurer votre clé de licence dans les paramètres");
+            return false;
+        }
+        
+        // Préparer les données JSON
+        string jsonData = StringFormat(
+            "{\"licenseKey\":\"%s\",\"accountNumber\":\"%s\",\"accountName\":\"%s\",\"serverName\":\"%s\"}",
+            m_licenseKey,
+            m_accountNumber,
+            m_accountName,
+            m_serverName
+        );
+        
+        // Effectuer la requête HTTP
+        char postData[];
+        char resultData[];
+        string resultHeaders;
+        
+        StringToCharArray(jsonData, postData, 0, StringLen(jsonData));
+        
+        int timeout = 5000; // 5 secondes
+        int res = WebRequest(
+            "POST",
+            m_serverUrl,
+            "Content-Type: application/json\r\n",
+            timeout,
+            postData,
+            resultData,
+            resultHeaders
+        );
+        
+        // Vérifier la réponse
+        if(res == -1)
+        {
+            int errorCode = GetLastError();
+            m_isValid = false;
+            m_errorMessage = StringFormat("Erreur de connexion (code: %d)", errorCode);
+            
+            if(errorCode == 4060)
+            {
+                Print("❌ ERREUR: L'URL '", m_serverUrl, "' n'est pas autorisée.");
+                Print("📝 SOLUTION: Ajoutez cette URL dans MetaTrader > Outils > Options > WebRequest");
+            }
+            else
+            {
+                Print("❌ ERREUR: Impossible de contacter le serveur. Code: ", errorCode);
+            }
+            
+            return false;
+        }
+        
+        // Parser la réponse JSON
+        string response = CharArrayToString(resultData);
+        
+        // Vérifier si la licence est valide
+        if(StringFind(response, "\"valid\":true") >= 0)
+        {
+            m_isValid = true;
+            m_lastValidation = currentTime;
+            m_errorMessage = "";
+            Print("✅ Licence validée pour compte ", m_accountNumber);
+            return true;
+        }
+        else
+        {
+            m_isValid = false;
+            m_errorMessage = "Licence invalide";
+            
+            int msgPos = StringFind(response, "\"message\":\"");
+            if(msgPos >= 0) {
+                int start = msgPos + 11;
+                int end = StringFind(response, "\"", start);
+                if(end > start) m_errorMessage = StringSubstr(response, start, end - start);
+            }
+            
+            Print("❌ Validation échouée: ", m_errorMessage);
+            return false;
+        }
+    }
+};
 
 //--- Buffers
 double BuyBuffer[];
@@ -72,18 +216,6 @@ struct SLanguageTexts
 SLanguageTexts texts;
 ENUM_LANGUAGE currentLanguage;
 
-//--- Inputs
-input string            LICENSE_KEY = "";        // 🔑 CLÉ DE LICENCE
-input int               EMA_Fast = 2;            // Fast EMA Period
-input int               EMA_Slow = 9;            // Slow EMA Period
-input bool              ShowSignals = true;      // Show Signals
-input bool              ShowDashboard = true;    // Show Dashboard
-input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
-
-//--- URL Serveur de validation (interne, caché aux inputs)
-string SERVER_URL = "http://localhost:3000/api/validate"; 
-// Note: En production, mettez l'URL de votre serveur VPS/Railway
-
 //+------------------------------------------------------------------+
 //| Initialise les textes selon la langue                           |
 //+------------------------------------------------------------------+
@@ -129,58 +261,23 @@ void InitLanguageTexts(ENUM_LANGUAGE lang)
          texts.invalidLicense = "🔒 INVALID LICENSE\nContact seller";
          break;
          
-      case LANG_SPANISH: // Español
-         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
-         texts.timeframe = "⏰ Marco Temporal: ";
-         texts.trendStrength = "📈 Fuerza Tendencia: ";
-         texts.emaStatus = "🔄 Estado EMA: ";
-         texts.distance = "📏 Distancia: ";
-         texts.signal = "🎯 Ultima Senal: ";
-         texts.strong = "🟢 FUERTE";
-         texts.medium = "🟡 MEDIA";
-         texts.weak = "🔴 DEBIL";
-         texts.bullish = "🟢 ALCISTA";
-         texts.bearish = "🔴 BAJISTA";
-         texts.analyzing = "Analizando...";
-         texts.buySignal = "COMPRA";
-         texts.sellSignal = "VENTA";
-         texts.invalidLicense = "🔒 LICENCIA INVALIDA\nContacte vendedor";
-         break;
-         
-      case LANG_GERMAN: // Deutsch
-         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
-         texts.timeframe = "⏰ Zeitrahmen: ";
-         texts.trendStrength = "📈 Trendstarke: ";
-         texts.emaStatus = "🔄 EMA Status: ";
-         texts.distance = "📏 Abstand: ";
-         texts.signal = "🎯 Letztes Signal: ";
-         texts.strong = "🟢 STARK";
-         texts.medium = "🟡 MITTEL";
-         texts.weak = "🔴 SCHWACH";
-         texts.bullish = "🟢 HAUSSISCH";
-         texts.bearish = "🔴 BARISCH";
-         texts.analyzing = "Analysiere...";
-         texts.buySignal = "KAUF";
-         texts.sellSignal = "VERKAUF";
-         texts.invalidLicense = "🔒 UNGÜLTIGE LIZENZ\nVerkäufer kontaktieren";
-         break;
-         
-      case LANG_ITALIAN: // Italiano
+        // Autres langues par défaut en anglais pour simplifier ce fichier combiné
+      default:
          texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
          texts.timeframe = "⏰ Timeframe: ";
-         texts.trendStrength = "📈 Forza Trend: ";
-         texts.emaStatus = "🔄 Stato EMA: ";
-         texts.distance = "📏 Distanza: ";
-         texts.signal = "🎯 Ultimo Segnale: ";
-         texts.strong = "🟢 FORTE";
-         texts.medium = "🟡 MEDIA";
-         texts.weak = "🔴 DEBOLE";
-         texts.bullish = "🟢 RIALZISTA";
-         texts.bearish = "🔴 RIBASSISTA";
-         texts.analyzing = "Analisi...";
-         texts.buySignal = "ACQUISTO";
-         texts.sellSignal = "VENDITA";
-         texts.invalidLicense = "🔒 LICENZA NON VALIDA\nContattare venditore";
+         texts.trendStrength = "📈 Trend Strength: ";
+         texts.emaStatus = "🔄 EMA Status: ";
+         texts.distance = "📏 Distance: ";
+         texts.signal = "🎯 Last Signal: ";
+         texts.strong = "🟢 STRONG";
+         texts.medium = "🟡 MEDIUM";
+         texts.weak = "🔴 WEAK";
+         texts.bullish = "🟢 BULLISH";
+         texts.bearish = "🔴 BEARISH";
+         texts.analyzing = "Analyzing...";
+         texts.buySignal = "BUY";
+         texts.sellSignal = "SELL";
+         texts.invalidLicense = "🔒 INVALID LICENSE\nContact seller";
          break;
    }
 }
@@ -554,8 +651,8 @@ void OnDeinit(const int reason)
    EventKillTimer();
    DeleteDashboard();
    
-   // Nettoyage objet licence
-   if(licenseValidator != NULL)
+   // Nettoyage objet licence (seulement si le pointeur existe)
+   if(CheckPointer(licenseValidator) != POINTER_INVALID)
    {
       delete licenseValidator;
       licenseValidator = NULL;

@@ -95,18 +95,36 @@ class LicenseManager {
 
     // Vérifier si le compte est autorisé
     const accountNumbers = license.account_numbers || [];
-    const isAccountAuthorized = accountNumbers.includes(accountNumber);
+    
+    // Logique de validation améliorée (supporte "12345" et "12345|ServerName")
+    const isAccountAuthorized = accountNumbers.some(entry => {
+      // Si l'entrée contient un pipe |, c'est qu'il y a une restriction serveur
+      if (entry.includes('|')) {
+        const [authNum, authServer] = entry.split('|');
+        // Il faut que le numéro ET le serveur correspondent
+        if (authNum === accountNumber.toString()) {
+           // Si le serveur autorisé est "*", on accepte tout (wildcard)
+           if (authServer === '*') return true;
+           // Sinon on compare (insensible à la casse par sécurité)
+           return authServer.toLowerCase() === serverName.toLowerCase();
+        }
+        return false;
+      }
+      
+      // Sinon c'est juste un numéro (comportement classique)
+      return entry === accountNumber.toString();
+    });
 
     // Si le compte n'est pas dans la liste
     if (!isAccountAuthorized) {
       // STRICT MODE: On refuse l'accès si le compte n'est pas autorisé
       // Le client doit fournir son numéro de compte à l'admin pour l'ajouter manuellement
-      await this.db.logValidation(licenseKey, accountNumber, accountName, serverName, false, 'Compte non autorisé (Restriction active)');
+      await this.db.logValidation(licenseKey, accountNumber, accountName, serverName, false, 'Compte non autorisé ou mauvais serveur');
       
       return {
         valid: false,
         error: 'ACCOUNT_NOT_AUTHORIZED',
-        message: `Compte ${accountNumber} non autorisé. Contactez le support pour l'activer.`,
+        message: `Compte ${accountNumber} non autorisé sur ce serveur (${serverName}).`,
         accountsUsed: accountNumbers
       };
     }

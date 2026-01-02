@@ -288,9 +288,14 @@
                         <div class="card">
                             <h3 style="margin-bottom: 20px; color: #4a5568;">Gestion des Comptes Autorisés</h3>
                             
-                            <div class="form-group" style="display: flex; gap: 10px;">
-                                <input type="text" id="newAccountNumber" placeholder="Numéro de compte trading (ex: 12345678)">
-                                <button onclick="addAccount()" class="btn btn-primary" style="width: auto;">Ajouter</button>
+                            <div class="form-group">
+                                <label style="font-size: 0.9em; color: #718096;">Ajouter un compte :</label>
+                                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                                    <input type="text" id="newAccountNumber" placeholder="N° Compte (ex: 12345)" style="flex: 1;">
+                                    <input type="text" id="newServerName" placeholder="Serveur (Optionnel)" style="flex: 1;">
+                                    <button onclick="addAccount()" class="btn btn-primary" style="width: auto;">Ajouter</button>
+                                </div>
+                                <small style="color: #cbd5e0; font-style: italic;">Laissez le serveur vide pour autoriser le compte sur tous les serveurs.</small>
                             </div>
                             <div id="accountMsg" class="alert"></div>
 
@@ -298,6 +303,17 @@
                                 <h4 style="margin-bottom: 10px; color: #718096; font-size: 0.9em; text-transform: uppercase;">Comptes Actifs</h4>
                                 <div id="accountsList">
                                     <!-- Listen comptes -->
+                                </div>
+                            </div>
+
+                            <!-- SECTION TENTATIVES RÉCENTES -->
+                            <div style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #e2e8f0;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <h4 style="color: #e53e3e; font-size: 0.9em; text-transform: uppercase;">⚠️ Tentatives bloquées récentes</h4>
+                                    <button onclick="loadPendingRequests()" style="background:none; border:none; cursor:pointer; font-size:1.2em;" title="Rafraîchir">🔄</button>
+                                </div>
+                                <div id="pendingList" style="background: #fff5f5; border-radius: 6px; padding: 10px; min-height: 50px;">
+                                    <div style="text-align: center; color: #feb2b2; font-size: 0.9em;">Chargement...</div>
                                 </div>
                             </div>
                         </div>
@@ -420,6 +436,9 @@
             
             renderAccounts();
             renderSidebar(); // Update active state
+            
+            // Charger les tentatives bloquées
+            loadPendingRequests();
         }
 
         function showEmptyState() {
@@ -438,37 +457,131 @@
                 return;
             }
 
-            list.innerHTML = accounts.map(acc => `
+            list.innerHTML = accounts.map(acc => {
+                // Gestion affichage number|server
+                let num = acc;
+                let srv = null;
+                if(acc.includes('|')) {
+                    [num, srv] = acc.split('|');
+                }
+
+                return `
                 <div class="account-item">
-                    <span class="account-number">${acc}</span>
+                    <div style="display: flex; flex-direction: column;">
+                        <span class="account-number">#${num}</span>
+                        ${srv ? `<span style="font-size: 0.8em; color: #718096;">🏢 ${srv}</span>` : ''}
+                    </div>
                     <button onclick="removeAccount('${acc}')" class="btn btn-danger">Retirer</button>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+        }
+        
+        // --- Pendings (Logs) ---
+        function loadPendingRequests() {
+            if (!currentLicense) return;
+            const container = document.getElementById('pendingList');
+            container.innerHTML = '<div style="text-align: center; color: #718096; font-size: 0.8em;">Chargement...</div>';
+
+            fetch(`${API_URL}/logs?licenseKey=${currentLicense.key}&limit=50`, { 
+                headers: { 'X-Admin-Secret': adminSecret } 
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(!data.success) throw new Error(data.error);
+                
+                // Filtrer: Valid=false (0 ou false)
+                // Et dedupliquer (garder le plus récent)
+                const blocked = data.logs.filter(l => l.valid === false || l.valid === 0);
+                
+                const uniqueAttempts = new Map();
+                blocked.forEach(log => {
+                    const key = `${log.account_number}|${log.server_name}`;
+                    // On ne garde que ceux qui ne sont PAS encore dans la liste autorisée
+                    const isAlreadyAdded = (currentLicense.accountNumbers || []).some(auth => {
+                         // Check simple number match
+                         if(auth === log.account_number) return true;
+                         // Check exact match number|server
+                         if(auth === key) return true;
+                         // Check number|*
+                         if(auth === `${log.account_number}|*`) return true;
+                         return false;
+                    });
+                    
+                    if(!isAlreadyAdded && !uniqueAttempts.has(key)) {
+                        uniqueAttempts.set(key, log);
+                    }
+                });
+
+                if(uniqueAttempts.size === 0) {
+                    container.innerHTML = '<div style="text-align: center; color: #a0aec0; font-size: 0.8em; padding: 10px;">Aucune tentative récente</div>';
+                    return;
+                }
+
+                container.innerHTML = Array.from(uniqueAttempts.values()).map(log => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #fed7d7;">
+                        <div style="display: flex; flex-direction: column;">
+                            <span style="font-weight: bold; color: #c53030;">#${log.account_number}</span>
+                            <span style="font-size: 0.75em; color: #718096;">${log.server_name || 'Inconnu'} • ${new Date(log.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                        <button onclick="fastAdd('${log.account_number}', '${log.server_name || ''}')" 
+                                class="btn btn-primary" 
+                                style="width: auto; padding: 4px 8px; font-size: 0.8em; background: #48bb78;">
+                            Autoriser
+                        </button>
+                    </div>
+                `).join('');
+            })
+            .catch(err => {
+                container.innerHTML = `<div style="color:red; font-size:0.8em;">Erreur logs</div>`;
+                console.error(err);
+            });
+        }
+        
+        function fastAdd(num, server) {
+            document.getElementById('newAccountNumber').value = num;
+            document.getElementById('newServerName').value = server;
+            addAccount(); // Appelle la fonction standard
         }
 
         // --- Actions ---
         function addAccount() {
-            const input = document.getElementById('newAccountNumber');
-            const num = input.value.trim();
-            if(!num) return;
+            const inputNum = document.getElementById('newAccountNumber');
+            const inputSrv = document.getElementById('newServerName');
+            
+            const num = inputNum.value.trim();
+            let srv = inputSrv.value.trim();
+            
+            if(!num) return showMsg('accountMsg', 'Numéro requis', 'error');
+
+            // Créer format stockage: "12345" ou "12345|Serveur"
+            let entry = num;
+            if(srv) {
+                entry = `${num}|${srv}`;
+            }
 
             const accounts = currentLicense.accountNumbers || [];
-            if(accounts.includes(num)) {
-                showMsg('accountMsg', 'Compte déjà autorisé', 'error');
+            if(accounts.includes(entry)) {
+                showMsg('accountMsg', 'Ce compte est déjà autorisé', 'error');
                 return;
             }
 
-            const newAccounts = [...accounts, num];
+            const newAccounts = [...accounts, entry];
             updateLicenseAccounts(newAccounts)
                 .then(() => {
-                    input.value = '';
+                    inputNum.value = '';
+                    inputSrv.value = '';
                     showMsg('accountMsg', 'Compte ajouté avec succès', 'success');
+                    // Refresh la liste des bloqués pour le faire disparaitre
+                    setTimeout(loadPendingRequests, 1000);
                 });
         }
 
-        function removeAccount(num) {
-            if(!confirm(`Retirer l'accès au compte ${num} ?`)) return;
-            const newAccounts = currentLicense.accountNumbers.filter(a => a !== num);
+        function removeAccount(entry) {
+            let confirmMsg = `Retirer l'accès ?`;
+            if(!confirm(confirmMsg)) return;
+            
+            const newAccounts = currentLicense.accountNumbers.filter(a => a !== entry);
             updateLicenseAccounts(newAccounts);
         }
 

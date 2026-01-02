@@ -66,29 +66,47 @@ input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
 //string SERVER_URL = "http://localhost:3000/api/validate"; 
 string SERVER_URL = "https://licence-indicator-server.onrender.com/api/validate";
 
-// ==========================================
-// 3. CLASSE VALIDATEUR (Intégrée)
-// ==========================================
+//+------------------------------------------------------------------+
+//| WININET IMPORTS (POUR HTTP DANS INDICATEUR)                     |
+//+------------------------------------------------------------------+
+#import "wininet.dll"
+   int InternetOpenW(string sAgent, int lAccessType, string sProxyName, string sProxyBypass, int lFlags);
+   int InternetConnectW(int hInternet, string sServerName, int nServerPort, string sUsername, string sPassword, int lService, int lFlags, int lContext);
+   int HttpOpenRequestW(int hConnect, string sVerb, string sObjectName, string sVersion, string sReferer, string sAcceptTypes, int lFlags, int lContext);
+   int HttpSendRequestW(int hRequest, string sHeaders, int lHeadersLength, char &sOptional[], int lOptionalLength);
+   int InternetReadFile(int hFile, char &sBuffer[], int lNumBytesToRead, int &lNumberOfBytesRead);
+   int InternetCloseHandle(int hInet);
+#import
 
+// Constantes WinInet
+#define INTERNET_OPEN_TYPE_PRECONFIG 0
+#define INTERNET_SERVICE_HTTP 3
+#define INTERNET_FLAG_SECURE 0x00800000
+#define INTERNET_FLAG_PRAGMA_NOCACHE 0x00000100
+#define INTERNET_FLAG_KEEP_CONNECTION 0x00400000
+#define INTERNET_FLAG_RELOAD 0x80000000
+
+//+------------------------------------------------------------------+
+//| Classe de Validation de Licence (Version WinInet)               |
+//+------------------------------------------------------------------+
 class CLicenseValidator
 {
 private:
     string m_licenseKey;
     string m_serverUrl;
-    datetime m_lastValidation;
-    bool m_isValid;
-    string m_errorMessage;
-    int m_validationInterval;
-    
-    // Informations du compte
     string m_accountNumber;
     string m_accountName;
     string m_serverName;
     
+    int m_validationInterval;
+    datetime m_lastValidation;
+    bool m_isValid;
+    string m_errorMessage;
+    
 public:
     CLicenseValidator(string licenseKey, string serverUrl, int interval = 3600)
     {
-        // Nettoyage de la clé (suppression espaces inutiles)
+        // Nettoyage de la clé
         string trimmedKey = licenseKey;
         StringTrimLeft(trimmedKey);
         StringTrimRight(trimmedKey);
@@ -350,29 +368,9 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
-//| WININET IMPORTS (POUR HTTP DANS INDICATEUR)                     |
+//| Création du tableau de bord                                     |
 //+------------------------------------------------------------------+
-#import "wininet.dll"
-   int InternetOpenW(string sAgent, int lAccessType, string sProxyName, string sProxyBypass, int lFlags);
-   int InternetConnectW(int hInternet, string sServerName, int nServerPort, string sUsername, string sPassword, int lService, int lFlags, int lContext);
-   int HttpOpenRequestW(int hConnect, string sVerb, string sObjectName, string sVersion, string sReferer, string sAcceptTypes, int lFlags, int lContext);
-   int HttpSendRequestW(int hRequest, string sHeaders, int lHeadersLength, char &sOptional[], int lOptionalLength);
-   int InternetReadFile(int hFile, char &sBuffer[], int lNumBytesToRead, int &lNumberOfBytesRead);
-   int InternetCloseHandle(int hInet);
-#import
-
-// Constantes WinInet
-#define INTERNET_OPEN_TYPE_PRECONFIG 0
-#define INTERNET_SERVICE_HTTP 3
-#define INTERNET_FLAG_SECURE 0x00800000
-#define INTERNET_FLAG_PRAGMA_NOCACHE 0x00000100
-#define INTERNET_FLAG_KEEP_CONNECTION 0x00400000
-#define INTERNET_FLAG_RELOAD 0x80000000
-
-//+------------------------------------------------------------------+
-//| Classe de Validation de Licence (Version WinInet)               |
-//+------------------------------------------------------------------+
-class CLicenseValidator
+void CreateDashboard()
 {
    DeleteDashboard();
    

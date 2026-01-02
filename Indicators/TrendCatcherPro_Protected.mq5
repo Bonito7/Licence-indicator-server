@@ -516,8 +516,33 @@ void UpdateDashboard()
 //+------------------------------------------------------------------+
 void OnTimer()
 {
+   static bool firstValidationDone = false;
    static int tick = 0;
    tick++;
+   
+   // --- PREMIÈRE VALIDATION DÉCALÉE (Pour éviter erreur 4014) ---
+   if(!firstValidationDone)
+   {
+       Print("⏳ Tentative de validation (Timer)...");
+       isLicenseValid = licenseValidator.Validate(true);
+       firstValidationDone = true;
+       
+       if(isLicenseValid)
+       {
+           Print("✅ Validation réussie !");
+           CreateDashboard(); // Re-créer tout le dashboard propre
+       }
+       else
+       {
+           Print("❌ Validation échouée : ", licenseValidator.GetErrorMessage());
+           CreateDashboard(); // Afficher l'erreur rouge
+           CreateLabel("Info", 15, 75, "❌ " + licenseValidator.GetErrorMessage(), clrWhite, 8);
+           CreateLabel("Info2", 15, 95, "Compte: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)), clrSilver, 8);
+           ChartRedraw();
+       }
+       return; // On sort pour laisser le temps d'afficher
+   }
+   // -------------------------------------------------------------
    
    if(isLicenseValid) UpdateDashboard();
    
@@ -528,6 +553,8 @@ void OnTimer()
        {
            isLicenseValid = false;
            CreateDashboard(); // Passage au rouge
+           CreateLabel("Info", 15, 75, "❌ Licence expirée/invalide", clrWhite, 8);
+           ChartRedraw();
        }
    }
 }

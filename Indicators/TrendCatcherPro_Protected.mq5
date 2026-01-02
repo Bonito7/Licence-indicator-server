@@ -110,57 +110,81 @@ public:
     bool Validate(bool forceValidation = false)
     {
         datetime currentTime = TimeCurrent();
+        if(!forceValidation && m_isValid && (currentTime - m_lastValidation) < m_validationInterval) return true;
         
-        if(!forceValidation && m_isValid && (currentTime - m_lastValidation) < m_validationInterval)
-            return true;
-        
-        if(m_licenseKey == "")
-        {
-            m_isValid = false;
-            m_errorMessage = "Clé manquante";
-            return false;
-        }
-        
-        string jsonData = StringFormat(
-            "{\"licenseKey\":\"%s\",\"accountNumber\":\"%s\",\"accountName\":\"%s\",\"serverName\":\"%s\"}",
-            m_licenseKey, m_accountNumber, m_accountName, m_serverName
-        );
+        if(m_licenseKey == "") { m_errorMessage = "Clé manquante"; return false; }
+
+        string headers = "Content-Type: application/json\r\n";
+        string jsonData = StringFormat("{\"licenseKey\":\"%s\",\"accountNumber\":\"%s\",\"accountName\":\"%s\",\"serverName\":\"%s\"}", m_licenseKey, m_accountNumber, m_accountName, m_serverName);
         
         char postData[];
-        char resultData[];
-        string resultHeaders;
         StringToCharArray(jsonData, postData, 0, StringLen(jsonData));
         
-        int res = WebRequest("POST", m_serverUrl, "Content-Type: application/json\r\n", 5000, postData, resultData, resultHeaders);
+        // 1. Parsing URL (Host vs Path)
+        string host = m_serverUrl;
+        string path = "/";
+        int port = 443; // HTTPS par défaut
         
-        if(res == -1)
-        {
-            int errorCode = GetLastError();
-            m_isValid = false;
-            m_errorMessage = StringFormat("Erreur Connexion (%d)", errorCode);
-            
-            if(errorCode == 4060)
-            {
-               m_errorMessage = "URL Non Autorisée (4060)";
-               Print("❌ ERREUR: URL non autorisée dans MT5. Ajoutez: ", m_serverUrl);
-            }
+        // Enlevez https://
+        StringReplace(host, "https://", "");
+        StringReplace(host, "http://", "");
+        
+        int slashPos = StringFind(host, "/");
+        if(slashPos > 0) {
+            path = StringSubstr(host, slashPos);
+            host = StringSubstr(host, 0, slashPos);
+        }
+
+        // 2. WinInet Connexion
+        int hInt = InternetOpenW("MQL5-Agent", INTERNET_OPEN_TYPE_PRECONFIG, NULL, NULL, 0);
+        if(hInt == 0) { m_errorMessage = "WinInet Init Failed"; return false; }
+        
+        int hConn = InternetConnectW(hInt, host, port, "", "", INTERNET_SERVICE_HTTP, 0, 0);
+        if(hConn == 0) { InternetCloseHandle(hInt); m_errorMessage = "Serveur inaccessible"; return false; }
+        
+        int flags = INTERNET_FLAG_SECURE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD;
+        int hReq = HttpOpenRequestW(hConn, "POST", path, NULL, NULL, NULL, flags, 0);
+        
+        if(hReq == 0) { InternetCloseHandle(hConn); InternetCloseHandle(hInt); m_errorMessage = "Requête échouée"; return false; }
+        
+        // 3. Envoyer
+        int res = HttpSendRequestW(hReq, headers, StringLen(headers), postData, ArraySize(postData));
+        
+        if(res == 0) {
+            InternetCloseHandle(hReq); InternetCloseHandle(hConn); InternetCloseHandle(hInt);
+            m_errorMessage = "Envoi échoué (DLL)";
             return false;
         }
         
-        string response = CharArrayToString(resultData);
+        // 4. Lire réponse
+        char buffer[];
+        ArrayResize(buffer, 2048); // Taille buffer
+        char readBuff[1024];
+        int bytesRead = 0;
+        int totalBytes = 0;
         
-        if(StringFind(response, "\"valid\":true") >= 0)
-        {
+        do {
+            InternetReadFile(hReq, readBuff, 1024, bytesRead);
+            if(bytesRead > 0) {
+                ArrayCopy(buffer, readBuff, totalBytes, 0, bytesRead);
+                totalBytes += bytesRead;
+            }
+        } while(bytesRead > 0);
+        
+        InternetCloseHandle(hReq); InternetCloseHandle(hConn); InternetCloseHandle(hInt);
+        
+        string response = CharArrayToString(buffer, 0, totalBytes);
+        
+        // 5. Analyser JSON (Simplifié)
+        if(StringFind(response, "\"valid\":true") >= 0) {
             m_isValid = true;
             m_lastValidation = currentTime;
             m_errorMessage = "";
             return true;
-        }
-        else
-        {
+        } else {
             m_isValid = false;
             m_errorMessage = "Licence invalide";
-             int msgPos = StringFind(response, "\"message\":\"");
+            int msgPos = StringFind(response, "\"message\":\"");
             if(msgPos >= 0) {
                 int start = msgPos + 11;
                 int end = StringFind(response, "\"", start);
@@ -326,9 +350,29 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
-//| Création du tableau de bord                                     |
+//| WININET IMPORTS (POUR HTTP DANS INDICATEUR)                     |
 //+------------------------------------------------------------------+
-void CreateDashboard()
+#import "wininet.dll"
+   int InternetOpenW(string sAgent, int lAccessType, string sProxyName, string sProxyBypass, int lFlags);
+   int InternetConnectW(int hInternet, string sServerName, int nServerPort, string sUsername, string sPassword, int lService, int lFlags, int lContext);
+   int HttpOpenRequestW(int hConnect, string sVerb, string sObjectName, string sVersion, string sReferer, string sAcceptTypes, int lFlags, int lContext);
+   int HttpSendRequestW(int hRequest, string sHeaders, int lHeadersLength, char &sOptional[], int lOptionalLength);
+   int InternetReadFile(int hFile, char &sBuffer[], int lNumBytesToRead, int &lNumberOfBytesRead);
+   int InternetCloseHandle(int hInet);
+#import
+
+// Constantes WinInet
+#define INTERNET_OPEN_TYPE_PRECONFIG 0
+#define INTERNET_SERVICE_HTTP 3
+#define INTERNET_FLAG_SECURE 0x00800000
+#define INTERNET_FLAG_PRAGMA_NOCACHE 0x00000100
+#define INTERNET_FLAG_KEEP_CONNECTION 0x00400000
+#define INTERNET_FLAG_RELOAD 0x80000000
+
+//+------------------------------------------------------------------+
+//| Classe de Validation de Licence (Version WinInet)               |
+//+------------------------------------------------------------------+
+class CLicenseValidator
 {
    DeleteDashboard();
    

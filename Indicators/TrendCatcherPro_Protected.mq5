@@ -274,16 +274,13 @@ int OnInit()
    // Initialiser les textes selon la langue
    InitLanguageTexts(Language);
    
-   // --- VÉRIFICATION LICENCE (AJOUTÉ) ---
+   // --- VÉRIFICATION LICENCE (DÉCALÉE VERS ONTIMER) ---
    licenseValidator = new CLicenseValidator(LICENSE_KEY, SERVER_URL);
-   isLicenseValid = licenseValidator.Validate(true);
+   // On ne valide PAS ici pour éviter l'erreur 4014 (Fonction interdite dans OnInit)
+   isLicenseValid = false; 
    
-   if(!isLicenseValid)
-   {
-      string msg = texts.invalidLicense + "\n" + licenseValidator.GetErrorMessage();
-      Alert(msg);
-      // On continue mais sans calculs
-   }
+   // Démarrer le timer pour valider après 1 seconde
+   EventSetTimer(1);
    // ------------------------------------
    
    // Set buffers

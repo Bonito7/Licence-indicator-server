@@ -99,32 +99,16 @@ class LicenseManager {
 
     // Si le compte n'est pas dans la liste
     if (!isAccountAuthorized) {
-      // Vérifier si on peut ajouter ce compte
-      if (accountNumbers.length < license.max_accounts) {
-        // Auto-ajouter le compte
-        await this.db.addAccountToLicense(licenseKey, accountNumber);
-        await this.db.logValidation(licenseKey, accountNumber, accountName, serverName, true, 'Nouveau compte ajouté automatiquement');
-        
-        return {
-          valid: true,
-          message: 'Licence valide - Compte ajouté',
-          license: {
-            key: licenseKey,
-            accountsUsed: accountNumbers.length + 1,
-            maxAccounts: license.max_accounts,
-            expiryDate: license.expiry_date
-          }
-        };
-      } else {
-        // Limite de comptes atteinte
-        await this.db.logValidation(licenseKey, accountNumber, accountName, serverName, false, 'Limite de comptes atteinte');
-        return {
-          valid: false,
-          error: 'MAX_ACCOUNTS_REACHED',
-          message: `Cette licence est limitée à ${license.max_accounts} compte(s). Limite atteinte.`,
-          accountsUsed: accountNumbers
-        };
-      }
+      // STRICT MODE: On refuse l'accès si le compte n'est pas autorisé
+      // Le client doit fournir son numéro de compte à l'admin pour l'ajouter manuellement
+      await this.db.logValidation(licenseKey, accountNumber, accountName, serverName, false, 'Compte non autorisé (Restriction active)');
+      
+      return {
+        valid: false,
+        error: 'ACCOUNT_NOT_AUTHORIZED',
+        message: `Compte ${accountNumber} non autorisé. Contactez le support pour l'activer.`,
+        accountsUsed: accountNumbers
+      };
     }
 
     // Tout est OK

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion Multi-Produits MQL5</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+
+        /* Sidebar - Liste des produits */
+        .products-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .product-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-left: 4px solid transparent;
+        }
+
+        .product-item:hover {
+            background: #e9ecef;
+        }
+
+        .product-item.active {
+            background: white;
+            border-left-color: #667eea;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        .product-key {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            color: #2d3748;
+            margin-bottom: 5px;
+            word-break: break-all;
+        }
+
+        .product-meta {
+            font-size: 0.85em;
+            color: #718096;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Contenu principal */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .empty-selection {
+            text-align: center;
+            padding: 50px;
+            color: #a0aec0;
+            background: rgba(255,255,255,0.9);
+            border-radius: 12px;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #4a5568;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 1em;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+            width: 100%;
+        }
+
+        .btn-primary:hover {
+            background: #5a67d8;
+        }
+
+        .btn-danger {
+            background-color: #fc8181;
+            color: white;
+            padding: 5px 10px;
+            font-size: 0.8em;
+        }
+        
+        .btn-delete-license {
+            background-color: #e53e3e; 
+            color: white;
+            margin-top: 20px;
+        }
+
+        .account-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px;
+            background: #f7fafc;
+            border-radius: 6px;
+            margin-bottom: 8px;
+        }
+
+        .account-number {
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            width: 400px;
+            max-width: 90%;
+        }
+        
+        .alert {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .alert-error {
+            background: #fed7d7;
+            color: #c53030;
+        }
+        
+        .alert-success {
+            background: #c6f6d5;
+            color: #2f855a;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="loginSection" class="login-container">
+        <div class="card">
+            <h2 style="margin-bottom: 20px; text-align: center;">🔐 Connexion Admin</h2>
+            <div class="form-group">
+                <label>Clé secrète admin</label>
+                <input type="password" id="adminSecret" placeholder="Entrez la clé secrète">
+            </div>
+            <button onclick="login()" class="btn btn-primary">Se connecter</button>
+            <div id="loginError" class="alert alert-error" style="margin-top: 15px;"></div>
+        </div>
+    </div>
+
+    <!-- Main Dashboard -->
+    <div id="mainSection" style="display: none;">
+        <div class="container">
+            <div class="header">
+                <div>
+                    <h1>Gestion Multi-Produits</h1>
+                    <p style="opacity: 0.8">Gérez vos robots et indicateurs</p>
+                </div>
+                <button onclick="logout()" class="btn" style="background: rgba(255,255,255,0.2); color: white;">Déconnexion</button>
+            </div>
+
+            <div class="dashboard-grid">
+                <!-- Sidebar: Liste des Licences -->
+                <div class="sidebar">
+                    <div class="card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="color: #4a5568;">Vos Produits</h3>
+                            <button onclick="showCreateModal()" class="btn btn-primary" style="width: auto; padding: 5px 10px; font-size: 0.9em;">+</button>
+                        </div>
+                        <div id="licensesList" class="products-list">
+                            <!-- Rempli par JS -->
+                            <div style="text-align: center; color: #a0aec0; padding: 20px;">Chargement...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main: Détail Licence -->
+                <div class="main-content">
+                    <!-- Rien sélectionné -->
+                    <div id="emptyState" class="empty-selection">
+                        <div style="font-size: 3em; margin-bottom: 15px;">👈</div>
+                        <h3>Sélectionnez un produit à gauche</h3>
+                        <p>ou créez-en un nouveau pour commencer</p>
+                    </div>
+
+                    <!-- Détail sélectionné -->
+                    <div id="licenseDetail" style="display: none;">
+                        <input type="hidden" id="currentLicenseId">
+                        
+                        <!-- Info Licence -->
+                        <div class="card" style="border-left: 5px solid #667eea;">
+                            <h2 style="color: #2d3748; margin-bottom: 5px;">Produit Sélectionné</h2>
+                            <div style="background: #edf2f7; padding: 15px; border-radius: 6px; margin: 15px 0;">
+                                <label style="font-size: 0.8em; color: #718096; text-transform: uppercase; letter-spacing: 1px;">Clé de Licence (à mettre dans le code MQL5)</label>
+                                <div id="displayKey" style="font-family: 'Courier New', monospace; font-size: 1.4em; font-weight: bold; color: #2d3748; margin-top: 5px; user-select: all;"></div>
+                            </div>
+                            <div class="product-meta">
+                                <span>📅 Créé le: <span id="displayDate"></span></span>
+                                <span>👥 <span id="displayCount">0</span> comptes autorisés</span>
+                            </div>
+                        </div>
+
+                        <!-- Gestion Comptes -->
+                        <div class="card">
+                            <h3 style="margin-bottom: 20px; color: #4a5568;">Gestion des Comptes Autorisés</h3>
+                            
+                            <div class="form-group" style="display: flex; gap: 10px;">
+                                <input type="text" id="newAccountNumber" placeholder="Numéro de compte trading (ex: 12345678)">
+                                <button onclick="addAccount()" class="btn btn-primary" style="width: auto;">Ajouter</button>
+                            </div>
+                            <div id="accountMsg" class="alert"></div>
+
+                            <div style="margin-top: 20px;">
+                                <h4 style="margin-bottom: 10px; color: #718096; font-size: 0.9em; text-transform: uppercase;">Comptes Actifs</h4>
+                                <div id="accountsList">
+                                    <!-- Listen comptes -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <button onclick="deleteLicense()" class="btn btn-delete-license" style="width: 100%;">🗑️ Supprimer ce produit</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Création -->
+    <div id="createModal" class="modal">
+        <div class="modal-content">
+            <h2 style="margin-bottom: 20px; color: #2d3748;">Nouveau Produit</h2>
+            <div class="form-group">
+                <label>Nom du produit / Clé de licence</label>
+                <input type="text" id="newLicenseKey" placeholder="Ex: ROBOT-GOLD-V2">
+                <small style="color: #718096; font-size: 0.85em; margin-top: 5px; display: block;">C'est la clé que vous mettrez dans votre code MQL5. Utilisez des majuscules et tirets.</small>
+            </div>
+            <div id="createMsg" class="alert"></div>
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #4a5568;">Annuler</button>
+                <button onclick="createNewProduct()" class="btn btn-primary">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Utiliser une URL relative pour que ça marche partout (local et ligne)
+        // Si on est sur localhost, ça tape localhost:3000/api
+        // Si on est en ligne, ça tape mon-site.com/api
+        const API_URL = '/api'; 
+        
+        let adminSecret = '';
+        let currentLicense = null;
+
+        // --- Auth ---
+        function login() {
+            const val = document.getElementById('adminSecret').value;
+            if(!val) return showMsg('loginError', 'Entrez la clé secrète', 'error');
+            
+            adminSecret = val;
+            
+            // Test connection
+            fetch(`${API_URL}/stats`, { headers: { 'X-Admin-Secret': adminSecret } })
+            .then(res => {
+                if(res.status === 401) throw new Error('Clé incorrecte');
+                if(!res.ok) throw new Error('Erreur connexion');
+                return res.json();
+            })
+            .then(() => {
+                document.getElementById('loginSection').style.display = 'none';
+                document.getElementById('mainSection').style.display = 'block';
+                loadLicenses();
+            })
+            .catch(err => showMsg('loginError', err.message, 'error'));
+        }
+
+        function logout() {
+            location.reload();
+        }
+
+        // --- Core ---
+        function loadLicenses() {
+            fetch(`${API_URL}/licenses`, { headers: { 'X-Admin-Secret': adminSecret } })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    licenses = data.licenses;
+                    renderSidebar();
+                    if(currentLicense) {
+                        // Refresh current view if still exists
+                        const stillExists = licenses.find(l => l.id === currentLicense.id);
+                        if(stillExists) selectLicense(stillExists.id);
+                        else showEmptyState();
+                    }
+                }
+            })
+            .catch(console.error);
+        }
+
+        function renderSidebar() {
+            const container = document.getElementById('licensesList');
+            if(licenses.length === 0) {
+                container.innerHTML = '<div style="padding: 20px; text-align: center; color: #718096; font-size: 0.9em;">Aucun produit créé.<br>Cliquez sur + pour commencer.</div>';
+                return;
+            }
+
+            container.innerHTML = licenses.map(l => `
+                <div class="product-item ${currentLicense && currentLicense.id === l.id ? 'active' : ''}" 
+                     onclick="selectLicense('${l.id}')">
+                    <div class="product-key">${l.key}</div>
+                    <div class="product-meta">
+                        <span>${(l.accountNumbers || []).length} comptes</span>
+                        <span>${new Date(l.createdAt).toLocaleDateString()}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function selectLicense(id) {
+            currentLicense = licenses.find(l => l.id === id);
+            if(!currentLicense) return;
+
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('licenseDetail').style.display = 'block';
+            
+            document.getElementById('displayKey').textContent = currentLicense.key;
+            document.getElementById('displayDate').textContent = new Date(currentLicense.createdAt).toLocaleDateString();
+            document.getElementById('displayCount').textContent = (currentLicense.accountNumbers || []).length;
+            document.getElementById('currentLicenseId').value = currentLicense.id;
+            
+            renderAccounts();
+            renderSidebar(); // Update active state
+        }
+
+        function showEmptyState() {
+            currentLicense = null;
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('licenseDetail').style.display = 'none';
+            renderSidebar();
+        }
+
+        function renderAccounts() {
+            const list = document.getElementById('accountsList');
+            const accounts = currentLicense.accountNumbers || [];
+            
+            if(accounts.length === 0) {
+                list.innerHTML = '<div style="color: #a0aec0; text-align: center; padding: 20px; background: #f7fafc; border-radius: 6px;">Aucun compte autorisé</div>';
+                return;
+            }
+
+            list.innerHTML = accounts.map(acc => `
+                <div class="account-item">
+                    <span class="account-number">${acc}</span>
+                    <button onclick="removeAccount('${acc}')" class="btn btn-danger">Retirer</button>
+                </div>
+            `).join('');
+        }
+
+        // --- Actions ---
+        function addAccount() {
+            const input = document.getElementById('newAccountNumber');
+            const num = input.value.trim();
+            if(!num) return;
+
+            const accounts = currentLicense.accountNumbers || [];
+            if(accounts.includes(num)) {
+                showMsg('accountMsg', 'Compte déjà autorisé', 'error');
+                return;
+            }
+
+            const newAccounts = [...accounts, num];
+            updateLicenseAccounts(newAccounts)
+                .then(() => {
+                    input.value = '';
+                    showMsg('accountMsg', 'Compte ajouté avec succès', 'success');
+                });
+        }
+
+        function removeAccount(num) {
+            if(!confirm(`Retirer l'accès au compte ${num} ?`)) return;
+            const newAccounts = currentLicense.accountNumbers.filter(a => a !== num);
+            updateLicenseAccounts(newAccounts);
+        }
+
+        function updateLicenseAccounts(accounts) {
+            return fetch(`${API_URL}/licenses/${currentLicense.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Secret': adminSecret
+                },
+                body: JSON.stringify({ accountNumbers: accounts })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    loadLicenses(); // Will re-render everything
+                }
+            });
+        }
+
+        // --- Creation ---
+        function showCreateModal() {
+            document.getElementById('createModal').style.display = 'flex';
+            document.getElementById('newLicenseKey').focus();
+        }
+
+        function closeModal() {
+            document.getElementById('createModal').style.display = 'none';
+            document.getElementById('newLicenseKey').value = '';
+            document.getElementById('createMsg').style.display = 'none';
+        }
+
+        function createNewProduct() {
+            const key = document.getElementById('newLicenseKey').value.trim().toUpperCase();
+            if(!key) {
+                showMsg('createMsg', 'Veuillez entrer une clé', 'error');
+                return;
+            }
+
+            if(licenses.some(l => l.key === key)) {
+                showMsg('createMsg', 'Cette clé existe déjà', 'error');
+                return;
+            }
+
+            fetch(`${API_URL}/licenses`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Secret': adminSecret
+                },
+                body: JSON.stringify({
+                    customKey: key,
+                    maxAccounts: 999
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    closeModal();
+                    loadLicenses(); // Refresh list
+                    // Auto select the new one
+                    setTimeout(() => {
+                        const newLicense = licenses.find(l => l.key === key);
+                        if(newLicense) selectLicense(newLicense.id);
+                    }, 500); 
+                } else {
+                    showMsg('createMsg', data.error, 'error');
+                }
+            })
+            .catch(err => showMsg('createMsg', err.message, 'error'));
+        }
+
+        function deleteLicense() {
+            if(!confirm(`Supprimer définitivement le produit "${currentLicense.key}" ?\nCette action est irréversible.`)) return;
+
+            fetch(`${API_URL}/licenses/${currentLicense.id}`, {
+                method: 'DELETE',
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(data.success) {
+                    showEmptyState();
+                    loadLicenses();
+                }
+            });
+        }
+
+        // --- Utils ---
+        function showMsg(id, txt, type) {
+            const el = document.getElementById(id);
+            el.textContent = txt;
+            el.className = `alert alert-${type}`;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 3000);
+        }
+    </script>
+</body>
+</html>

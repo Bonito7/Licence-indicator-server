@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Gestion des Licences MQL5</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🔐 Gestion des Licences MQL5</h1>
+        <p class="subtitle">Système de protection pour vos indicateurs</p>
+      </header>
+
+      <!-- Section de connexion -->
+      <div id="loginSection" class="card">
+        <h2>Connexion Admin</h2>
+        <div class="form-group">
+          <label for="adminSecret">Clé secrète admin:</label>
+          <input
+            type="password"
+            id="adminSecret"
+            placeholder="Entrez votre clé secrète"
+          />
+          <button onclick="login()" class="btn btn-primary">
+            Se connecter
+          </button>
+        </div>
+        <div id="loginError" class="error-message"></div>
+      </div>
+
+      <!-- Section principale (cachée par défaut) -->
+      <div id="mainSection" style="display: none">
+        <!-- Statistiques -->
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+              <div class="stat-value" id="totalLicenses">0</div>
+              <div class="stat-label">Licences totales</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">✅</div>
+            <div class="stat-content">
+              <div class="stat-value" id="activeLicenses">0</div>
+              <div class="stat-label">Licences actives</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">🔍</div>
+            <div class="stat-content">
+              <div class="stat-value" id="totalValidations">0</div>
+              <div class="stat-label">Validations totales</div>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon">📈</div>
+            <div class="stat-content">
+              <div class="stat-value" id="successRate">0%</div>
+              <div class="stat-label">Taux de succès</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Création de licence -->
+        <div class="card">
+          <h2>➕ Créer une nouvelle licence</h2>
+          <form id="createLicenseForm" onsubmit="createLicense(event)">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="accountNumbers"
+                  >Numéros de compte (optionnel):</label
+                >
+                <input
+                  type="text"
+                  id="accountNumbers"
+                  placeholder="Ex: 12345, 67890"
+                />
+                <small
+                  >Séparez les numéros par des virgules. Laissez vide pour
+                  auto-assignation.</small
+                >
+              </div>
+              <div class="form-group">
+                <label for="maxAccounts">Nombre max de comptes:</label>
+                <input
+                  type="number"
+                  id="maxAccounts"
+                  min="1"
+                  value="1"
+                  required
+                />
+                <small
+                  >Nombre maximum de comptes autorisés pour cette
+                  licence.</small
+                >
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="expiryDate">Date d'expiration (optionnel):</label>
+              <input type="date" id="expiryDate" />
+              <small>Laissez vide pour une licence sans expiration.</small>
+            </div>
+            <button type="submit" class="btn btn-primary">
+              Créer la licence
+            </button>
+          </form>
+          <div id="createSuccess" class="success-message"></div>
+          <div id="createError" class="error-message"></div>
+        </div>
+
+        <!-- Liste des licences -->
+        <div class="card">
+          <div class="card-header">
+            <h2>📋 Licences existantes</h2>
+            <button onclick="loadLicenses()" class="btn btn-secondary">
+              🔄 Actualiser
+            </button>
+          </div>
+
+          <div class="search-box">
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="🔍 Rechercher une licence..."
+              onkeyup="filterLicenses()"
+            />
+          </div>
+
+          <div class="table-container">
+            <table id="licensesTable">
+              <thead>
+                <tr>
+                  <th>Clé de licence</th>
+                  <th>Comptes</th>
+                  <th>Max comptes</th>
+                  <th>Expiration</th>
+                  <th>Statut</th>
+                  <th>Créée le</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="licensesBody">
+                <tr>
+                  <td colspan="7" class="loading">Chargement...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Logs récents -->
+        <div class="card">
+          <div class="card-header">
+            <h2>📜 Logs de validation récents</h2>
+            <button onclick="loadLogs()" class="btn btn-secondary">
+              🔄 Actualiser
+            </button>
+          </div>
+          <div class="table-container">
+            <table id="logsTable">
+              <thead>
+                <tr>
+                  <th>Date/Heure</th>
+                  <th>Clé de licence</th>
+                  <th>Compte</th>
+                  <th>Serveur</th>
+                  <th>Résultat</th>
+                  <th>Message</th>
+                </tr>
+              </thead>
+              <tbody id="logsBody">
+                <tr>
+                  <td colspan="6" class="loading">Chargement...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal pour éditer une licence -->
+    <div id="editModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeEditModal()">&times;</span>
+        <h2>✏️ Modifier la licence</h2>
+        <form id="editLicenseForm" onsubmit="updateLicense(event)">
+          <input type="hidden" id="editLicenseId" />
+          <div class="form-group">
+            <label>Clé de licence:</label>
+            <input type="text" id="editLicenseKey" readonly />
+          </div>
+          <div class="form-group">
+            <label for="editAccountNumbers">Numéros de compte:</label>
+            <input
+              type="text"
+              id="editAccountNumbers"
+              placeholder="Ex: 12345, 67890"
+            />
+          </div>
+          <div class="form-group">
+            <label for="editMaxAccounts">Nombre max de comptes:</label>
+            <input type="number" id="editMaxAccounts" min="1" required />
+          </div>
+          <div class="form-group">
+            <label for="editExpiryDate">Date d'expiration:</label>
+            <input type="date" id="editExpiryDate" />
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="editActive" />
+              Licence active
+            </label>
+          </div>
+          <button type="submit" class="btn btn-primary">Enregistrer</button>
+        </form>
+      </div>
+    </div>
+
+    <script src="admin.js"></script>
+  </body>
+</html>

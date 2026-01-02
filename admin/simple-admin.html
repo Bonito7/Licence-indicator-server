@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestion des Comptes Autorisés</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+
+        .license-key {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            color: #495057;
+            margin-top: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 20px;
+        }
+
+        .card h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            padding: 8px 15px;
+            font-size: 0.9em;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .accounts-list {
+            margin-top: 20px;
+        }
+
+        .account-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            transition: all 0.3s;
+        }
+
+        .account-item:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .account-number {
+            font-family: 'Courier New', monospace;
+            font-size: 1.1em;
+            color: #495057;
+            font-weight: 500;
+        }
+
+        .account-server {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-left: 15px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #6c757d;
+            margin-top: 5px;
+        }
+
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .message.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .message.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .login-container {
+            max-width: 400px;
+            margin: 100px auto;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #6c757d;
+        }
+
+        .empty-state-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Section -->
+    <div id="loginSection" class="login-container">
+        <div class="card">
+            <h2>🔐 Connexion Admin</h2>
+            <div class="form-group">
+                <label for="adminSecret">Clé secrète:</label>
+                <input type="password" id="adminSecret" placeholder="Entrez votre clé secrète">
+            </div>
+            <button onclick="login()" class="btn btn-primary" style="width: 100%;">Se connecter</button>
+            <div id="loginError" class="message error"></div>
+        </div>
+    </div>
+
+    <!-- Main Section -->
+    <div id="mainSection" style="display: none;">
+        <div class="container">
+            <!-- Header -->
+            <div class="header">
+                <h1>🔐 Gestion des Comptes Autorisés</h1>
+                <p>Licence de l'indicateur</p>
+                <div class="license-key" id="licenseKeyDisplay">MQL5-INDICATOR-PROD-2024-V1</div>
+            </div>
+
+            <!-- Stats -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalAccounts">0</div>
+                    <div class="stat-label">Comptes autorisés</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="totalValidations">0</div>
+                    <div class="stat-label">Validations totales</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="successRate">0%</div>
+                    <div class="stat-label">Taux de succès</div>
+                </div>
+            </div>
+
+            <!-- Add Account -->
+            <div class="card">
+                <h2>➕ Ajouter un compte</h2>
+                <div id="addMessage" class="message"></div>
+                <div class="form-group">
+                    <label for="accountNumber">Numéro de compte trading:</label>
+                    <input type="text" id="accountNumber" placeholder="Ex: 12345678">
+                </div>
+                <div class="form-group">
+                    <label for="serverName">Serveur (optionnel):</label>
+                    <input type="text" id="serverName" placeholder="Ex: ICMarkets-Demo">
+                </div>
+                <button onclick="addAccount()" class="btn btn-primary">Ajouter le compte</button>
+            </div>
+
+            <!-- Accounts List -->
+            <div class="card">
+                <h2>📋 Comptes autorisés (<span id="accountCount">0</span>)</h2>
+                <div id="accountsList" class="accounts-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api';
+        const LICENSE_KEY = 'MQL5-INDICATOR-PROD-2024-V1';
+        let adminSecret = '';
+        let licenseId = null;
+
+        function login() {
+            const secret = document.getElementById('adminSecret').value;
+            if (!secret) {
+                showMessage('loginError', 'Veuillez entrer la clé secrète', 'error');
+                return;
+            }
+
+            adminSecret = secret;
+
+            fetch(`${API_URL}/stats`, {
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(response => {
+                if (response.status === 401) {
+                    throw new Error('Clé secrète invalide');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('loginSection').style.display = 'none';
+                    document.getElementById('mainSection').style.display = 'block';
+                    loadLicense();
+                    loadStats();
+                }
+            })
+            .catch(error => {
+                showMessage('loginError', error.message, 'error');
+            });
+        }
+
+        function loadLicense() {
+            fetch(`${API_URL}/licenses`, {
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.licenses && data.licenses.length > 0) {
+                    const license = data.licenses.find(l => l.key === LICENSE_KEY);
+                    if (license) {
+                        licenseId = license.id;
+                        displayAccounts(license.accountNumbers || []);
+                        document.getElementById('totalAccounts').textContent = (license.accountNumbers || []).length;
+                    } else {
+                        displayAccounts([]);
+                    }
+                } else {
+                    displayAccounts([]);
+                }
+            })
+            .catch(error => {
+                console.error('Erreur:', error);
+                displayAccounts([]);
+            });
+        }
+
+        function loadStats() {
+            fetch(`${API_URL}/stats`, {
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('totalValidations').textContent = data.stats.totalValidations;
+                    document.getElementById('successRate').textContent = data.stats.successRate + '%';
+                }
+            });
+        }
+
+        function displayAccounts(accounts) {
+            const container = document.getElementById('accountsList');
+            document.getElementById('accountCount').textContent = accounts.length;
+
+            if (accounts.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <p>Aucun compte autorisé pour le moment</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = accounts.map(account => `
+                <div class="account-item">
+                    <div>
+                        <span class="account-number">${account}</span>
+                    </div>
+                    <button onclick="removeAccount('${account}')" class="btn btn-danger">Retirer</button>
+                </div>
+            `).join('');
+        }
+
+        function addAccount() {
+            const accountNumber = document.getElementById('accountNumber').value.trim();
+            
+            if (!accountNumber) {
+                showMessage('addMessage', 'Veuillez entrer un numéro de compte', 'error');
+                return;
+            }
+
+            fetch(`${API_URL}/licenses`, {
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !data.licenses) {
+                    throw new Error('Impossible de charger les licences');
+                }
+
+                const license = data.licenses.find(l => l.key === LICENSE_KEY);
+                if (!license) {
+                    throw new Error('Licence non trouvée');
+                }
+
+                const currentAccounts = license.accountNumbers || [];
+
+                if (currentAccounts.includes(accountNumber)) {
+                    showMessage('addMessage', 'Ce compte est déjà autorisé', 'error');
+                    return Promise.reject('Compte déjà existant');
+                }
+
+                const updatedAccounts = [...currentAccounts, accountNumber];
+
+                return fetch(`${API_URL}/licenses/${licenseId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({ accountNumbers: updatedAccounts })
+                });
+            })
+            .then(response => {
+                if (!response) return; // Skip if rejected earlier
+                return response.json();
+            })
+            .then(data => {
+                if (data && data.success) {
+                    showMessage('addMessage', `✅ Compte ${accountNumber} ajouté avec succès!`, 'success');
+                    document.getElementById('accountNumber').value = '';
+                    document.getElementById('serverName').value = '';
+                    loadLicense();
+                    loadStats();
+                }
+            })
+            .catch(error => {
+                if (error !== 'Compte déjà existant') {
+                    showMessage('addMessage', 'Erreur: ' + error.message, 'error');
+                }
+            });
+        }
+
+        function removeAccount(accountNumber) {
+            if (!confirm(`Retirer le compte ${accountNumber} ?`)) {
+                return;
+            }
+
+            fetch(`${API_URL}/licenses`, {
+                headers: { 'X-Admin-Secret': adminSecret }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (!data.success || !data.licenses) {
+                    throw new Error('Impossible de charger les licences');
+                }
+
+                const license = data.licenses.find(l => l.key === LICENSE_KEY);
+                if (!license) {
+                    throw new Error('Licence non trouvée');
+                }
+
+                const updatedAccounts = (license.accountNumbers || []).filter(acc => acc !== accountNumber);
+
+                return fetch(`${API_URL}/licenses/${licenseId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Secret': adminSecret
+                    },
+                    body: JSON.stringify({ accountNumbers: updatedAccounts })
+                });
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    loadLicense();
+                    loadStats();
+                }
+            })
+            .catch(error => {
+                alert('Erreur: ' + error.message);
+            });
+        }
+
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = 'block';
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

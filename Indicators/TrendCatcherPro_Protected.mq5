@@ -1,0 +1,577 @@
+//+------------------------------------------------------------------+
+//|              TrendCatcher Pro - DASHBOARD MULTILINGUE           |
+//|                    EMA 2/9 - SIGNALS SIMPLES                    |
+//+------------------------------------------------------------------+
+#property copyright "TrendCatcher Pro Multilingual"
+#property version   "3.0"
+#property indicator_chart_window
+#property indicator_buffers 4
+#property indicator_plots   2
+
+//--- PROTECTION DE LICENCE ---
+#include <LicenseValidator.mqh>
+//-----------------------------
+
+//--- Définition des propriétés des plots
+#property indicator_type1   DRAW_ARROW
+#property indicator_color1  clrLime
+#property indicator_width1  3
+
+#property indicator_type2   DRAW_ARROW
+#property indicator_color2  clrRed
+#property indicator_width2  3
+
+//--- Buffers
+double BuyBuffer[];
+double SellBuffer[];
+double FastEMA[];
+double SlowEMA[];
+
+//--- Handles
+int fastEMA, slowEMA;
+
+//--- Variables pour le tableau de bord
+string dashboardPrefix = "Dashboard_";
+color bgColor = C'30,30,40'; // Couleur de fond sombre
+int dashboardWidth = 260;
+int dashboardHeight = 190;
+bool isLicenseValid = false; // Variable pour suivre l'état de la licence
+
+//--- Protection
+CLicenseValidator* licenseValidator;
+
+//--- Table de traduction multilingue
+enum ENUM_LANGUAGE
+{
+   LANG_FRENCH = 0,    // Français
+   LANG_ENGLISH = 1,   // English
+   LANG_SPANISH = 2,   // Español
+   LANG_GERMAN = 3,    // Deutsch
+   LANG_ITALIAN = 4    // Italiano
+};
+
+struct SLanguageTexts
+{
+   string title;
+   string timeframe;
+   string trendStrength;
+   string emaStatus;
+   string distance;
+   string signal;
+   string strong;
+   string medium;
+   string weak;
+   string bullish;
+   string bearish;
+   string analyzing;
+   string buySignal;
+   string sellSignal;
+   string invalidLicense; // Texte pour licence invalide
+};
+
+SLanguageTexts texts;
+ENUM_LANGUAGE currentLanguage;
+
+//--- Inputs
+input string            LICENSE_KEY = "";        // 🔑 CLÉ DE LICENCE
+input int               EMA_Fast = 2;            // Fast EMA Period
+input int               EMA_Slow = 9;            // Slow EMA Period
+input bool              ShowSignals = true;      // Show Signals
+input bool              ShowDashboard = true;    // Show Dashboard
+input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
+
+//--- URL Serveur de validation (interne, caché aux inputs)
+string SERVER_URL = "http://localhost:3000/api/validate"; 
+// Note: En production, mettez l'URL de votre serveur VPS/Railway
+
+//+------------------------------------------------------------------+
+//| Initialise les textes selon la langue                           |
+//+------------------------------------------------------------------+
+void InitLanguageTexts(ENUM_LANGUAGE lang)
+{
+   currentLanguage = lang;
+   
+   switch(lang)
+   {
+      case LANG_FRENCH: // Français
+         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
+         texts.timeframe = "⏰ Periode: ";
+         texts.trendStrength = "📈 Force Tendance: ";
+         texts.emaStatus = "🔄 EMA Status: ";
+         texts.distance = "📏 Distance: ";
+         texts.signal = "🎯 Dernier Signal: ";
+         texts.strong = "🟢 FORTE";
+         texts.medium = "🟡 MOYENNE";
+         texts.weak = "🔴 FAIBLE";
+         texts.bullish = "🟢 HAUSSIER";
+         texts.bearish = "🔴 BAISSIER";
+         texts.analyzing = "Analyse...";
+         texts.buySignal = "ACHAT";
+         texts.sellSignal = "VENTE";
+         texts.invalidLicense = "🔒 LICENCE INVALIDE\nContactez le vendeur";
+         break;
+         
+      case LANG_ENGLISH: // English
+         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
+         texts.timeframe = "⏰ Timeframe: ";
+         texts.trendStrength = "📈 Trend Strength: ";
+         texts.emaStatus = "🔄 EMA Status: ";
+         texts.distance = "📏 Distance: ";
+         texts.signal = "🎯 Last Signal: ";
+         texts.strong = "🟢 STRONG";
+         texts.medium = "🟡 MEDIUM";
+         texts.weak = "🔴 WEAK";
+         texts.bullish = "🟢 BULLISH";
+         texts.bearish = "🔴 BEARISH";
+         texts.analyzing = "Analyzing...";
+         texts.buySignal = "BUY";
+         texts.sellSignal = "SELL";
+         texts.invalidLicense = "🔒 INVALID LICENSE\nContact seller";
+         break;
+         
+      case LANG_SPANISH: // Español
+         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
+         texts.timeframe = "⏰ Marco Temporal: ";
+         texts.trendStrength = "📈 Fuerza Tendencia: ";
+         texts.emaStatus = "🔄 Estado EMA: ";
+         texts.distance = "📏 Distancia: ";
+         texts.signal = "🎯 Ultima Senal: ";
+         texts.strong = "🟢 FUERTE";
+         texts.medium = "🟡 MEDIA";
+         texts.weak = "🔴 DEBIL";
+         texts.bullish = "🟢 ALCISTA";
+         texts.bearish = "🔴 BAJISTA";
+         texts.analyzing = "Analizando...";
+         texts.buySignal = "COMPRA";
+         texts.sellSignal = "VENTA";
+         texts.invalidLicense = "🔒 LICENCIA INVALIDA\nContacte vendedor";
+         break;
+         
+      case LANG_GERMAN: // Deutsch
+         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
+         texts.timeframe = "⏰ Zeitrahmen: ";
+         texts.trendStrength = "📈 Trendstarke: ";
+         texts.emaStatus = "🔄 EMA Status: ";
+         texts.distance = "📏 Abstand: ";
+         texts.signal = "🎯 Letztes Signal: ";
+         texts.strong = "🟢 STARK";
+         texts.medium = "🟡 MITTEL";
+         texts.weak = "🔴 SCHWACH";
+         texts.bullish = "🟢 HAUSSISCH";
+         texts.bearish = "🔴 BARISCH";
+         texts.analyzing = "Analysiere...";
+         texts.buySignal = "KAUF";
+         texts.sellSignal = "VERKAUF";
+         texts.invalidLicense = "🔒 UNGÜLTIGE LIZENZ\nVerkäufer kontaktieren";
+         break;
+         
+      case LANG_ITALIAN: // Italiano
+         texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
+         texts.timeframe = "⏰ Timeframe: ";
+         texts.trendStrength = "📈 Forza Trend: ";
+         texts.emaStatus = "🔄 Stato EMA: ";
+         texts.distance = "📏 Distanza: ";
+         texts.signal = "🎯 Ultimo Segnale: ";
+         texts.strong = "🟢 FORTE";
+         texts.medium = "🟡 MEDIA";
+         texts.weak = "🔴 DEBOLE";
+         texts.bullish = "🟢 RIALZISTA";
+         texts.bearish = "🔴 RIBASSISTA";
+         texts.analyzing = "Analisi...";
+         texts.buySignal = "ACQUISTO";
+         texts.sellSignal = "VENDITA";
+         texts.invalidLicense = "🔒 LICENZA NON VALIDA\nContattare venditore";
+         break;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   // Initialiser les textes selon la langue
+   InitLanguageTexts(Language);
+   
+   // --- VÉRIFICATION LICENCE ---
+   if(StringLen(LICENSE_KEY) == 0)
+   {
+      Alert(texts.invalidLicense + "\n(Clé manquante)");
+      return INIT_FAILED;
+   }
+   
+   licenseValidator = new CLicenseValidator(LICENSE_KEY, SERVER_URL);
+   isLicenseValid = licenseValidator.Validate(true);
+   
+   if(!isLicenseValid)
+   {
+      string errorMsg = texts.invalidLicense + "\nCompte: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+      Alert(errorMsg);
+      // On continue l'initialisation mais on désactivera le calcul
+      // Pour afficher le dashboard "Licence Invalide"
+   }
+   // ----------------------------
+   
+   // Set buffers
+   SetIndexBuffer(0, BuyBuffer, INDICATOR_DATA);
+   SetIndexBuffer(1, SellBuffer, INDICATOR_DATA);
+   SetIndexBuffer(2, FastEMA, INDICATOR_CALCULATIONS);
+   SetIndexBuffer(3, SlowEMA, INDICATOR_CALCULATIONS);
+   
+   // Set plot properties
+   PlotIndexSetInteger(0, PLOT_DRAW_TYPE, DRAW_ARROW);
+   PlotIndexSetInteger(0, PLOT_ARROW, 233);
+   PlotIndexSetInteger(0, PLOT_ARROW_SHIFT, 0);
+   PlotIndexSetDouble(0, PLOT_EMPTY_VALUE, EMPTY_VALUE);
+   PlotIndexSetString(0, PLOT_LABEL, texts.buySignal);
+   
+   PlotIndexSetInteger(1, PLOT_DRAW_TYPE, DRAW_ARROW);
+   PlotIndexSetInteger(1, PLOT_ARROW, 234);
+   PlotIndexSetInteger(1, PLOT_ARROW_SHIFT, 0);
+   PlotIndexSetDouble(1, PLOT_EMPTY_VALUE, EMPTY_VALUE);
+   PlotIndexSetString(1, PLOT_LABEL, texts.sellSignal);
+   
+   // Create EMA handles
+   fastEMA = iMA(_Symbol, PERIOD_CURRENT, EMA_Fast, 0, MODE_EMA, PRICE_CLOSE);
+   slowEMA = iMA(_Symbol, PERIOD_CURRENT, EMA_Slow, 0, MODE_EMA, PRICE_CLOSE);
+   
+   if(fastEMA == INVALID_HANDLE || slowEMA == INVALID_HANDLE)
+   {
+      Print("Failed to create EMA handles");
+      return INIT_FAILED;
+   }
+   
+   // Créer le tableau de bord si activé
+   if(ShowDashboard) 
+   {
+      CreateDashboard();
+      
+      // Timer pour dashboard (1s) ET revérification périodique licence (ex: 1 heure)
+      EventSetTimer(1); 
+   }
+   
+   if(isLicenseValid)
+      Print("✅ TrendCatcher Pro Initialized - Language: ", EnumToString(Language));
+   else
+      Print("❌ TrendCatcher Pro - LICENSE INVALID");
+      
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| Création du tableau de bord                                     |
+//+------------------------------------------------------------------+
+void CreateDashboard()
+{
+   DeleteDashboard();
+   
+   // Si licence invalide, afficher un dashboard rouge d'alerte
+   color bg = isLicenseValid ? bgColor : C'80,30,30';
+   string title = isLicenseValid ? texts.title : texts.invalidLicense;
+   
+   // Fond du tableau de bord
+   string bgName = dashboardPrefix + "BG";
+   ObjectCreate(0, bgName, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, bgName, OBJPROP_XDISTANCE, 10);
+   ObjectSetInteger(0, bgName, OBJPROP_YDISTANCE, 20);
+   ObjectSetInteger(0, bgName, OBJPROP_XSIZE, dashboardWidth);
+   ObjectSetInteger(0, bgName, OBJPROP_YSIZE, dashboardHeight);
+   ObjectSetInteger(0, bgName, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, bgName, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+   ObjectSetInteger(0, bgName, OBJPROP_BORDER_COLOR, clrSilver);
+   ObjectSetInteger(0, bgName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, bgName, OBJPROP_SELECTABLE, false);
+   
+   // Titre
+   CreateLabel("Title", 15, 25, title, isLicenseValid ? clrGold : clrWhite, 10);
+   
+   // Si licence invalide, on arrête là l'affichage
+   if(!isLicenseValid) 
+   {
+      CreateLabel("Info", 15, 75, "Compte non autorisé", clrWhite, 9);
+      CreateLabel("Key", 15, 95, LICENSE_KEY, clrLightGray, 8);
+      ChartRedraw();
+      return;
+   }
+   
+   // Labels d'information (seulement si valide)
+   CreateLabel("TF", 15, 55, texts.timeframe, clrCyan, 9);
+   CreateLabel("Trend", 15, 75, texts.trendStrength, clrWhite, 9);
+   CreateLabel("EMA", 15, 95, texts.emaStatus, clrWhite, 9);
+   CreateLabel("Dist", 15, 115, texts.distance, clrLightBlue, 9);
+   CreateLabel("Signal", 15, 135, texts.signal, clrLightGray, 9);
+   CreateLabel("Values", 15, 155, "", clrWhite, 9);
+   
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Créer un label                                                  |
+//+------------------------------------------------------------------+
+void CreateLabel(string name, int x, int y, string text, color clr, int size)
+{
+   string objName = dashboardPrefix + name;
+   ObjectCreate(0, objName, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, objName, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, objName, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, objName, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, objName, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, objName, OBJPROP_FONTSIZE, size);
+   ObjectSetString(0, objName, OBJPROP_FONT, "Arial");
+   ObjectSetInteger(0, objName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, objName, OBJPROP_SELECTABLE, false);
+}
+
+//+------------------------------------------------------------------+
+//| Mettre à jour le tableau de bord                                |
+//+------------------------------------------------------------------+
+void UpdateDashboard()
+{
+   if(!ShowDashboard) return;
+   if(!isLicenseValid) return; // Ne pas mettre à jour si invalide
+   
+   double fastArray[], slowArray[];
+   ArraySetAsSeries(fastArray, true);
+   ArraySetAsSeries(slowArray, true);
+   
+   // Copier les dernières valeurs
+   if(CopyBuffer(fastEMA, 0, 0, 2, fastArray) < 2) return;
+   if(CopyBuffer(slowEMA, 0, 0, 2, slowArray) < 2) return;
+   
+   double fastNow = fastArray[0];
+   double slowNow = slowArray[0];
+   
+   // Calculer la distance entre les EMA
+   double distance = 0;
+   if(slowNow != 0)
+      distance = MathAbs(fastNow - slowNow) / slowNow * 100;
+   
+   // Déterminer la force de la tendance
+   string trendStrength;
+   color trendColor;
+   if(distance > 0.15)
+   {
+      trendStrength = texts.strong;
+      trendColor = clrLimeGreen;
+   }
+   else if(distance > 0.08)
+   {
+      trendStrength = texts.medium;
+      trendColor = clrYellow;
+   }
+   else
+   {
+      trendStrength = texts.weak;
+      trendColor = clrRed;
+   }
+   
+   // Déterminer le statut EMA
+   string emaStatus;
+   color emaColor;
+   if(fastNow > slowNow)
+   {
+      emaStatus = texts.bullish;
+      emaColor = clrLimeGreen;
+   }
+   else
+   {
+      emaStatus = texts.bearish;
+      emaColor = clrRed;
+   }
+   
+   // Obtenir le timeframe
+   string tf;
+   switch(_Period)
+   {
+      case PERIOD_M1: tf = "M1"; break;
+      case PERIOD_M5: tf = "M5"; break;
+      case PERIOD_M15: tf = "M15"; break;
+      case PERIOD_M30: tf = "M30"; break;
+      case PERIOD_H1: tf = "H1"; break;
+      case PERIOD_H4: tf = "H4"; break;
+      case PERIOD_D1: tf = "D1"; break;
+      case PERIOD_W1: tf = "W1"; break;
+      case PERIOD_MN1: tf = "MN1"; break;
+      default: tf = "TF " + IntegerToString(_Period);
+   }
+   
+   // Chercher le dernier signal
+   string lastSignal = texts.analyzing;
+   color signalColor = clrLightGray;
+   
+   for(int i = 100; i >= 0; i--)
+   {
+      if(BuyBuffer[i] != EMPTY_VALUE && BuyBuffer[i] != 0)
+      {
+         lastSignal = texts.buySignal + " ✓";
+         signalColor = clrLime;
+         break;
+      }
+      if(SellBuffer[i] != EMPTY_VALUE && SellBuffer[i] != 0)
+      {
+         lastSignal = texts.sellSignal + " ✓";
+         signalColor = clrRed;
+         break;
+      }
+   }
+   
+   // Mettre à jour les labels
+   ObjectSetString(0, dashboardPrefix + "TF", OBJPROP_TEXT, texts.timeframe + tf);
+   
+   ObjectSetString(0, dashboardPrefix + "Trend", OBJPROP_TEXT, texts.trendStrength + trendStrength);
+   ObjectSetInteger(0, dashboardPrefix + "Trend", OBJPROP_COLOR, trendColor);
+   
+   ObjectSetString(0, dashboardPrefix + "EMA", OBJPROP_TEXT, texts.emaStatus + emaStatus);
+   ObjectSetInteger(0, dashboardPrefix + "EMA", OBJPROP_COLOR, emaColor);
+   
+   ObjectSetString(0, dashboardPrefix + "Dist", OBJPROP_TEXT, texts.distance + DoubleToString(distance, 2) + "%");
+   
+   ObjectSetString(0, dashboardPrefix + "Signal", OBJPROP_TEXT, texts.signal + lastSignal);
+   ObjectSetInteger(0, dashboardPrefix + "Signal", OBJPROP_COLOR, signalColor);
+   
+   // Afficher les valeurs actuelles des EMA
+   ObjectSetString(0, dashboardPrefix + "Values", OBJPROP_TEXT, 
+                  "EMA" + IntegerToString(EMA_Fast) + ": " + DoubleToString(fastNow, 5) + 
+                  " | EMA" + IntegerToString(EMA_Slow) + ": " + DoubleToString(slowNow, 5));
+   
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Timer function                                                   |
+//+------------------------------------------------------------------+
+void OnTimer()
+{
+   // Check périodique de la licence (chaque heure environ, ou aléatoire)
+   // Ici toutes les secondes pour l'exemple mais on checke vraiment toutes les N fois
+   static int tickCount = 0;
+   tickCount++;
+   
+   // Si le dashboard est actif, on l'update
+   if(isLicenseValid) 
+      UpdateDashboard();
+      
+   // Vérification périodique (ex: toutes les ~1h = 3600 secondes)
+   if(tickCount % 3600 == 0)
+   {
+      if(licenseValidator != NULL)
+      {
+         bool stillValid = licenseValidator.Validate(false); // false = check silencieux (pas de popup si valide)
+         if(!stillValid && isLicenseValid)
+         {
+            isLicenseValid = false;
+            Alert(texts.invalidLicense);
+            CreateDashboard(); // Redessine en mode "bloqué"
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+{
+   // --- SECURITÉ ---
+   if(!isLicenseValid) return 0; // Arrêter tout calcul si licence invalide
+   // ----------------
+   
+   // Check if we have enough data
+   if(rates_total < MathMax(EMA_Fast, EMA_Slow) + 10)
+      return 0;
+   
+   // Calculate start position
+   int start;
+   if(prev_calculated == 0)
+   {
+      start = MathMax(EMA_Fast, EMA_Slow);
+      // Initialize buffers
+      for(int i = 0; i < start; i++)
+      {
+         BuyBuffer[i] = EMPTY_VALUE;
+         SellBuffer[i] = EMPTY_VALUE;
+      }
+   }
+   else
+   {
+      start = prev_calculated - 1;
+   }
+   
+   // Copy EMA values
+   if(CopyBuffer(fastEMA, 0, 0, rates_total, FastEMA) <= 0) return 0;
+   if(CopyBuffer(slowEMA, 0, 0, rates_total, SlowEMA) <= 0) return 0;
+   
+   // Main calculation loop
+   for(int i = start; i < rates_total && !IsStopped(); i++)
+   {
+      // Reset signals
+      BuyBuffer[i] = EMPTY_VALUE;
+      SellBuffer[i] = EMPTY_VALUE;
+      
+      if(!ShowSignals) continue;
+      
+      // Get current values
+      double fastNow = FastEMA[i];
+      double slowNow = SlowEMA[i];
+      
+      // Get previous values (ensure we have them)
+      if(i > 0)
+      {
+         double fastPrev = FastEMA[i-1];
+         double slowPrev = SlowEMA[i-1];
+         
+         // Check for crossover
+         if(fastPrev < slowPrev && fastNow > slowNow)
+         {
+            // Buy signal - EMA fast crosses above EMA slow
+            BuyBuffer[i] = low[i] - 10 * _Point;
+         }
+         else if(fastPrev > slowPrev && fastNow < slowNow)
+         {
+            // Sell signal - EMA fast crosses below EMA slow
+            SellBuffer[i] = high[i] + 10 * _Point;
+         }
+      }
+   }
+   
+   return rates_total;
+}
+
+//+------------------------------------------------------------------+
+//| Deinitialization function                                        |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   EventKillTimer();
+   DeleteDashboard();
+   
+   // Nettoyage objet licence
+   if(licenseValidator != NULL)
+   {
+      delete licenseValidator;
+      licenseValidator = NULL;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Supprimer le tableau de bord                                    |
+//+------------------------------------------------------------------+
+void DeleteDashboard()
+{
+   int total = ObjectsTotal(0);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i);
+      if(StringFind(name, dashboardPrefix) == 0)
+         ObjectDelete(0, name);
+   }
+}

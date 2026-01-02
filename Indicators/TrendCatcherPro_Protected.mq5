@@ -17,172 +17,9 @@
 #property indicator_color2  clrRed
 #property indicator_width2  3
 
-//--- Inputs
-input string            LICENSE_KEY = "TRENDCATCHER_LICENCE_VALIDATOR"; // 🔑 CLÉ DE LICENCE
-input int               EMA_Fast = 2;            // Fast EMA Period
-input int               EMA_Slow = 9;            // Slow EMA Period
-input bool              ShowSignals = true;      // Show Signals
-input bool              ShowDashboard = true;    // Show Dashboard
-input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
-
-//--- URL Serveur de validation
-// ⚠️ IMPORTANT : URL Render
-string SERVER_URL = "https://licence-indicator-server.onrender.com/api/validate"; 
-
-//+------------------------------------------------------------------+
-//| Classe de validation de licence (INTÉGRÉE DIRECTEMENT)          |
-//+------------------------------------------------------------------+
-class CLicenseValidator
-{
-private:
-    string m_licenseKey;
-    string m_serverUrl;
-    datetime m_lastValidation;
-    bool m_isValid;
-    string m_errorMessage;
-    int m_validationInterval;
-    
-    // Informations du compte
-    string m_accountNumber;
-    string m_accountName;
-    string m_serverName;
-    
-public:
-    //+------------------------------------------------------------------+
-    //| Constructeur                                                      |
-    //+------------------------------------------------------------------+
-    CLicenseValidator(string licenseKey, string serverUrl, int interval = 3600)
-    {
-        m_licenseKey = licenseKey;
-        m_serverUrl = serverUrl;
-        m_validationInterval = interval;
-        m_lastValidation = 0;
-        m_isValid = false;
-        m_errorMessage = "";
-        
-        // Récupérer les informations du compte
-        m_accountNumber = IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
-        m_accountName = AccountInfoString(ACCOUNT_NAME);
-        m_serverName = AccountInfoString(ACCOUNT_SERVER);
-    }
-    
-    //+------------------------------------------------------------------+
-    //| Valider la licence                                               |
-    //+------------------------------------------------------------------+
-    bool Validate(bool forceValidation = false)
-    {
-        // Vérifier si une validation est nécessaire
-        datetime currentTime = TimeCurrent();
-        
-        if(!forceValidation && m_isValid && (currentTime - m_lastValidation) < m_validationInterval)
-        {
-            return true; // Utiliser le cache
-        }
-        
-        // Vérifier que la clé de licence est définie
-        if(m_licenseKey == "" || m_licenseKey == "VOTRE-CLE-DE-LICENCE")
-        {
-            m_isValid = false;
-            m_errorMessage = "Clé de licence non configurée";
-            Print("❌ ERREUR: Veuillez configurer votre clé de licence dans les paramètres");
-            return false;
-        }
-        
-        // Préparer les données JSON
-        string jsonData = StringFormat(
-            "{\"licenseKey\":\"%s\",\"accountNumber\":\"%s\",\"accountName\":\"%s\",\"serverName\":\"%s\"}",
-            m_licenseKey,
-            m_accountNumber,
-            m_accountName,
-            m_serverName
-        );
-        
-        // Effectuer la requête HTTP
-        char postData[];
-        char resultData[];
-        string resultHeaders;
-        
-        StringToCharArray(jsonData, postData, 0, StringLen(jsonData));
-        
-        int timeout = 5000; // 5 secondes
-        int res = WebRequest(
-            "POST",
-            m_serverUrl,
-            "Content-Type: application/json\r\n",
-            timeout,
-            postData,
-            resultData,
-            resultHeaders
-        );
-        
-        // Vérifier la réponse
-        if(res == -1)
-        {
-            int errorCode = GetLastError();
-            m_isValid = false;
-            m_errorMessage = StringFormat("Erreur de connexion (code: %d)", errorCode);
-            
-            if(errorCode == 4060)
-            {
-                Print("❌ ERREUR: L'URL '", m_serverUrl, "' n'est pas autorisée.");
-                Print("📝 SOLUTION: Ajoutez cette URL dans MetaTrader > Outils > Options > WebRequest");
-            }
-            else
-            {
-                Print("❌ ERREUR: Impossible de contacter le serveur. Code: ", errorCode);
-            }
-            
-            return false;
-        }
-        
-        // Parser la réponse JSON
-        string response = CharArrayToString(resultData);
-        
-        // Vérifier si la licence est valide
-        if(StringFind(response, "\"valid\":true") >= 0)
-        {
-            m_isValid = true;
-            m_lastValidation = currentTime;
-            m_errorMessage = "";
-            Print("✅ Licence validée pour compte ", m_accountNumber);
-            return true;
-        }
-        else
-        {
-            m_isValid = false;
-            m_errorMessage = "Licence invalide";
-            
-            int msgPos = StringFind(response, "\"message\":\"");
-            if(msgPos >= 0) {
-                int start = msgPos + 11;
-                int end = StringFind(response, "\"", start);
-                if(end > start) m_errorMessage = StringSubstr(response, start, end - start);
-            }
-            
-            Print("❌ Validation échouée: ", m_errorMessage);
-            return false;
-        }
-    }
-};
-
-//--- Buffers
-double BuyBuffer[];
-double SellBuffer[];
-double FastEMA[];
-double SlowEMA[];
-
-//--- Handles
-int fastEMA, slowEMA;
-
-//--- Variables pour le tableau de bord
-string dashboardPrefix = "Dashboard_";
-color bgColor = C'30,30,40'; // Couleur de fond sombre
-int dashboardWidth = 260;
-int dashboardHeight = 190;
-bool isLicenseValid = false; // Variable pour suivre l'état de la licence
-
-//--- Protection
-CLicenseValidator* licenseValidator;
+// ==========================================
+// 1. DÉFINITIONS TYPES (Enums & Structs)
+// ==========================================
 
 //--- Table de traduction multilingue
 enum ENUM_LANGUAGE
@@ -210,11 +47,147 @@ struct SLanguageTexts
    string analyzing;
    string buySignal;
    string sellSignal;
-   string invalidLicense; // Texte pour licence invalide
+   string invalidLicense;
 };
 
+// ==========================================
+// 2. INPUTS (Paramètres)
+// ==========================================
+
+input string            LICENSE_KEY = "TRENDCATCHER_LICENCE_VALIDATOR"; // 🔑 CLÉ DE LICENCE
+input int               EMA_Fast = 2;            // Fast EMA Period
+input int               EMA_Slow = 9;            // Slow EMA Period
+input bool              ShowSignals = true;      // Show Signals
+input bool              ShowDashboard = true;    // Show Dashboard
+input ENUM_LANGUAGE     Language = LANG_FRENCH;  // Language
+
+//--- URL Serveur de validation
+// ⚠️ IMPORTANT : Mettez votre URL Render ici
+//string SERVER_URL = "http://localhost:3000/api/validate"; 
+string SERVER_URL = "https://licence-indicator-server.onrender.com/api/validate";
+
+// ==========================================
+// 3. CLASSE VALIDATEUR (Intégrée)
+// ==========================================
+
+class CLicenseValidator
+{
+private:
+    string m_licenseKey;
+    string m_serverUrl;
+    datetime m_lastValidation;
+    bool m_isValid;
+    string m_errorMessage;
+    int m_validationInterval;
+    
+    // Informations du compte
+    string m_accountNumber;
+    string m_accountName;
+    string m_serverName;
+    
+public:
+    CLicenseValidator(string licenseKey, string serverUrl, int interval = 3600)
+    {
+        m_licenseKey = licenseKey;
+        m_serverUrl = serverUrl;
+        m_validationInterval = interval;
+        m_lastValidation = 0;
+        m_isValid = false;
+        m_errorMessage = "";
+        
+        m_accountNumber = IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
+        m_accountName = AccountInfoString(ACCOUNT_NAME);
+        m_serverName = AccountInfoString(ACCOUNT_SERVER);
+    }
+    
+    bool Validate(bool forceValidation = false)
+    {
+        datetime currentTime = TimeCurrent();
+        
+        if(!forceValidation && m_isValid && (currentTime - m_lastValidation) < m_validationInterval)
+            return true;
+        
+        if(m_licenseKey == "")
+        {
+            m_isValid = false;
+            m_errorMessage = "Clé manquante";
+            return false;
+        }
+        
+        string jsonData = StringFormat(
+            "{\"licenseKey\":\"%s\",\"accountNumber\":\"%s\",\"accountName\":\"%s\",\"serverName\":\"%s\"}",
+            m_licenseKey, m_accountNumber, m_accountName, m_serverName
+        );
+        
+        char postData[];
+        char resultData[];
+        string resultHeaders;
+        StringToCharArray(jsonData, postData, 0, StringLen(jsonData));
+        
+        int res = WebRequest("POST", m_serverUrl, "Content-Type: application/json\r\n", 5000, postData, resultData, resultHeaders);
+        
+        if(res == -1)
+        {
+            m_isValid = false;
+            m_errorMessage = "Erreur connexion";
+            int err = GetLastError();
+            if(err == 4060) Print("❌ ERREUR: URL non autorisée dans MT5. Ajoutez: ", m_serverUrl);
+            return false;
+        }
+        
+        string response = CharArrayToString(resultData);
+        
+        if(StringFind(response, "\"valid\":true") >= 0)
+        {
+            m_isValid = true;
+            m_lastValidation = currentTime;
+            m_errorMessage = "";
+            return true;
+        }
+        else
+        {
+            m_isValid = false;
+            m_errorMessage = "Licence invalide";
+             int msgPos = StringFind(response, "\"message\":\"");
+            if(msgPos >= 0) {
+                int start = msgPos + 11;
+                int end = StringFind(response, "\"", start);
+                if(end > start) m_errorMessage = StringSubstr(response, start, end - start);
+            }
+            return false;
+        }
+    }
+    
+    string GetErrorMessage() { return m_errorMessage; }
+};
+
+// ==========================================
+// 4. VARIABLES GLOBALES
+// ==========================================
+
+//--- Buffers
+double BuyBuffer[];
+double SellBuffer[];
+double FastEMA[];
+double SlowEMA[];
+
+//--- Handles
+int fastEMA, slowEMA;
+
+//--- Variables pour le tableau de bord
+string dashboardPrefix = "Dashboard_";
+color bgColor = C'30,30,40'; // Couleur de fond sombre
+int dashboardWidth = 260;
+int dashboardHeight = 190;
+bool isLicenseValid = false; // Variable Globale Licence
+
+CLicenseValidator* licenseValidator; // Pointeur validateur
 SLanguageTexts texts;
 ENUM_LANGUAGE currentLanguage;
+
+// ==========================================
+// 5. FONCTIONS
+// ==========================================
 
 //+------------------------------------------------------------------+
 //| Initialise les textes selon la langue                           |
@@ -240,7 +213,7 @@ void InitLanguageTexts(ENUM_LANGUAGE lang)
          texts.analyzing = "Analyse...";
          texts.buySignal = "ACHAT";
          texts.sellSignal = "VENTE";
-         texts.invalidLicense = "🔒 LICENCE INVALIDE\nContactez le vendeur";
+         texts.invalidLicense = "🔒 LICENCE INVALIDE\nContactez vendeur";
          break;
          
       case LANG_ENGLISH: // English
@@ -261,8 +234,7 @@ void InitLanguageTexts(ENUM_LANGUAGE lang)
          texts.invalidLicense = "🔒 INVALID LICENSE\nContact seller";
          break;
          
-        // Autres langues par défaut en anglais pour simplifier ce fichier combiné
-      default:
+      default: // Autres langues par défaut
          texts.title = "🚀 TRENDCATCHER PRO\n📊 EMA " + IntegerToString(EMA_Fast) + "/" + IntegerToString(EMA_Slow);
          texts.timeframe = "⏰ Timeframe: ";
          texts.trendStrength = "📈 Trend Strength: ";
@@ -277,7 +249,7 @@ void InitLanguageTexts(ENUM_LANGUAGE lang)
          texts.analyzing = "Analyzing...";
          texts.buySignal = "BUY";
          texts.sellSignal = "SELL";
-         texts.invalidLicense = "🔒 INVALID LICENSE\nContact seller";
+         texts.invalidLicense = "🔒 INVALID LICENSE";
          break;
    }
 }
@@ -290,24 +262,17 @@ int OnInit()
    // Initialiser les textes selon la langue
    InitLanguageTexts(Language);
    
-   // --- VÉRIFICATION LICENCE ---
-   if(StringLen(LICENSE_KEY) == 0)
-   {
-      Alert(texts.invalidLicense + "\n(Clé manquante)");
-      return INIT_FAILED;
-   }
-   
+   // --- VÉRIFICATION LICENCE (AJOUTÉ) ---
    licenseValidator = new CLicenseValidator(LICENSE_KEY, SERVER_URL);
    isLicenseValid = licenseValidator.Validate(true);
    
    if(!isLicenseValid)
    {
-      string errorMsg = texts.invalidLicense + "\nCompte: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
-      Alert(errorMsg);
-      // On continue l'initialisation mais on désactivera le calcul
-      // Pour afficher le dashboard "Licence Invalide"
+      string msg = texts.invalidLicense + "\n" + licenseValidator.GetErrorMessage();
+      Alert(msg);
+      // On continue mais sans calculs
    }
-   // ----------------------------
+   // ------------------------------------
    
    // Set buffers
    SetIndexBuffer(0, BuyBuffer, INDICATOR_DATA);
@@ -342,16 +307,12 @@ int OnInit()
    if(ShowDashboard) 
    {
       CreateDashboard();
-      
-      // Timer pour dashboard (1s) ET revérification périodique licence (ex: 1 heure)
       EventSetTimer(1); 
    }
    
-   if(isLicenseValid)
-      Print("✅ TrendCatcher Pro Initialized - Language: ", EnumToString(Language));
-   else
-      Print("❌ TrendCatcher Pro - LICENSE INVALID");
-      
+   if(isLicenseValid) Print("✅ TrendCatcher Validated. Language: ", EnumToString(Language));
+   else Print("❌ License Invalid");
+   
    return INIT_SUCCEEDED;
 }
 
@@ -362,8 +323,8 @@ void CreateDashboard()
 {
    DeleteDashboard();
    
-   // Si licence invalide, afficher un dashboard rouge d'alerte
-   color bg = isLicenseValid ? bgColor : C'80,30,30';
+   // Gestion affichage si licence invalide
+   color bg = isLicenseValid ? bgColor : C'80,30,30'; // Fond rouge si invalide
    string title = isLicenseValid ? texts.title : texts.invalidLicense;
    
    // Fond du tableau de bord
@@ -382,16 +343,15 @@ void CreateDashboard()
    // Titre
    CreateLabel("Title", 15, 25, title, isLicenseValid ? clrGold : clrWhite, 10);
    
-   // Si licence invalide, on arrête là l'affichage
-   if(!isLicenseValid) 
+   // Si licence invalide, on arrête là
+   if(!isLicenseValid)
    {
-      CreateLabel("Info", 15, 75, "Compte non autorisé", clrWhite, 9);
-      CreateLabel("Key", 15, 95, LICENSE_KEY, clrLightGray, 8);
-      ChartRedraw();
-      return;
+       CreateLabel("Info", 15, 75, "Compte non autorisé", clrWhite, 9);
+       ChartRedraw();
+       return;
    }
    
-   // Labels d'information (seulement si valide)
+   // Labels d'information
    CreateLabel("TF", 15, 55, texts.timeframe, clrCyan, 9);
    CreateLabel("Trend", 15, 75, texts.trendStrength, clrWhite, 9);
    CreateLabel("EMA", 15, 95, texts.emaStatus, clrWhite, 9);
@@ -425,7 +385,7 @@ void CreateLabel(string name, int x, int y, string text, color clr, int size)
 void UpdateDashboard()
 {
    if(!ShowDashboard) return;
-   if(!isLicenseValid) return; // Ne pas mettre à jour si invalide
+   if(!isLicenseValid) return; // Ne pas update si invalide
    
    double fastArray[], slowArray[];
    ArraySetAsSeries(fastArray, true);
@@ -539,28 +499,19 @@ void UpdateDashboard()
 //+------------------------------------------------------------------+
 void OnTimer()
 {
-   // Check périodique de la licence (chaque heure environ, ou aléatoire)
-   // Ici toutes les secondes pour l'exemple mais on checke vraiment toutes les N fois
-   static int tickCount = 0;
-   tickCount++;
+   static int tick = 0;
+   tick++;
    
-   // Si le dashboard est actif, on l'update
-   if(isLicenseValid) 
-      UpdateDashboard();
-      
-   // Vérification périodique (ex: toutes les ~1h = 3600 secondes)
-   if(tickCount % 3600 == 0)
+   if(isLicenseValid) UpdateDashboard();
+   
+   // Revérifier licence toutes les heures (3600s)
+   if(tick % 3600 == 0 && licenseValidator != NULL)
    {
-      if(licenseValidator != NULL)
-      {
-         bool stillValid = licenseValidator.Validate(false); // false = check silencieux (pas de popup si valide)
-         if(!stillValid && isLicenseValid)
-         {
-            isLicenseValid = false;
-            Alert(texts.invalidLicense);
-            CreateDashboard(); // Redessine en mode "bloqué"
-         }
-      }
+       if(!licenseValidator.Validate(false))
+       {
+           isLicenseValid = false;
+           CreateDashboard(); // Passage au rouge
+       }
    }
 }
 
@@ -578,9 +529,9 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
-   // --- SECURITÉ ---
-   if(!isLicenseValid) return 0; // Arrêter tout calcul si licence invalide
-   // ----------------
+   // --- PROTECTION ---
+   if(!isLicenseValid) return 0;
+   // ------------------
    
    // Check if we have enough data
    if(rates_total < MathMax(EMA_Fast, EMA_Slow) + 10)
@@ -651,12 +602,8 @@ void OnDeinit(const int reason)
    EventKillTimer();
    DeleteDashboard();
    
-   // Nettoyage objet licence (seulement si le pointeur existe)
    if(CheckPointer(licenseValidator) != POINTER_INVALID)
-   {
       delete licenseValidator;
-      licenseValidator = NULL;
-   }
 }
 
 //+------------------------------------------------------------------+

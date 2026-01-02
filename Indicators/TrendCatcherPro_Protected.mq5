@@ -160,7 +160,7 @@ public:
         int hConn = InternetConnectW(hInt, host, port, "", "", INTERNET_SERVICE_HTTP, 0, 0);
         if(hConn == 0) { InternetCloseHandle(hInt); m_errorMessage = "Serveur inaccessible"; return false; }
         
-        int flags = INTERNET_FLAG_SECURE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD;
+        int flags = (int)(INTERNET_FLAG_SECURE | INTERNET_FLAG_PRAGMA_NOCACHE | INTERNET_FLAG_RELOAD);
         int hReq = HttpOpenRequestW(hConn, "POST", path, NULL, NULL, NULL, flags, 0);
         
         if(hReq == 0) { InternetCloseHandle(hConn); InternetCloseHandle(hInt); m_errorMessage = "Requête échouée"; return false; }

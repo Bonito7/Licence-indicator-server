@@ -240,7 +240,11 @@
                     <h1>Gestion Multi-Produits</h1>
                     <p style="opacity: 0.8">Gérez vos robots et indicateurs</p>
                 </div>
-                <button onclick="logout()" class="btn" style="background: rgba(255,255,255,0.2); color: white;">Déconnexion</button>
+                </div>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="showDebugLogs()" class="btn" style="background: rgba(255,255,255,0.2); color: white; font-size: 0.8em;">🐞 Debug Logs</button>
+                    <button onclick="logout()" class="btn" style="background: rgba(255,255,255,0.2); color: white;">Déconnexion</button>
+                </div>
             </div>
 
             <div class="dashboard-grid">
@@ -338,6 +342,20 @@
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button onclick="closeModal()" class="btn" style="background: #e2e8f0; color: #4a5568;">Annuler</button>
                 <button onclick="createNewProduct()" class="btn btn-primary">Créer</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Debug -->
+    <div id="debugModal" class="modal" style="display:none;">
+        <div class="modal-content" style="width: 800px; max-width: 95%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: #2d3748;">🐞 Logs Globaux (Debug)</h2>
+                <button onclick="document.getElementById('debugModal').style.display='none'" class="btn" style="background: #e2e8f0; color: #4a5568;">Fermer</button>
+            </div>
+            <p style="margin-bottom: 15px; color: #718096;">Voici les 50 dernières requêtes reçues par le serveur, TOUTES licences confondues.</p>
+            <div id="debugLogList" style="background: #2d3748; color: #a0aec0; padding: 15px; border-radius: 6px; height: 400px; overflow-y: auto; font-family: monospace; font-size: 0.85em;">
+                Chargement...
             </div>
         </div>
     </div>
@@ -677,6 +695,42 @@
             el.className = `alert alert-${type}`;
             el.style.display = 'block';
             setTimeout(() => el.style.display = 'none', 3000);
+        }
+        
+        // --- Debug ---
+        function showDebugLogs() {
+            document.getElementById('debugModal').style.display = 'flex';
+            const container = document.getElementById('debugLogList');
+            container.innerHTML = 'Chargement...';
+
+            // Appel SANS licenseKey pour tout avoir
+            fetch(`${API_URL}/logs?limit=50`, { 
+                headers: { 'X-Admin-Secret': adminSecret } 
+            })
+            .then(res => res.json())
+            .then(data => {
+                if(!data.success) throw new Error(data.error);
+                
+                if(data.logs.length === 0) {
+                    container.innerHTML = 'Aucun log trouvé sur le serveur.';
+                    return;
+                }
+
+                container.innerHTML = data.logs.map(log => {
+                    const color = log.success ? '#48bb78' : '#f56565';
+                    const icon = log.success ? '✅' : '❌';
+                    return `
+                    <div style="margin-bottom: 8px; border-bottom: 1px solid #4a5568; padding-bottom: 8px;">
+                        <span style="color: #cbd5e0;">[${new Date(log.timestamp).toLocaleTimeString()}]</span>
+                        <span style="color: ${color}; font-weight: bold;">${icon} ${log.error_message || 'OK'}</span><br>
+                        🔑 Clé reçue: <span style="color: #ecc94b;">"${log.license_key}"</span><br>
+                        👤 Compte: <span style="color: #63b3ed;">${log.account_number}</span> | Serveur: <span style="color: #63b3ed;">"${log.server_name}"</span>
+                    </div>`;
+                }).join('');
+            })
+            .catch(err => {
+                container.innerHTML = 'Erreur: ' + err.message;
+            });
         }
     </script>
 </body>

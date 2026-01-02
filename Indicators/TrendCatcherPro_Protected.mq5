@@ -88,7 +88,12 @@ private:
 public:
     CLicenseValidator(string licenseKey, string serverUrl, int interval = 3600)
     {
-        m_licenseKey = licenseKey;
+        // Nettoyage de la clé (suppression espaces inutiles)
+        string trimmedKey = licenseKey;
+        StringTrimLeft(trimmedKey);
+        StringTrimRight(trimmedKey);
+        
+        m_licenseKey = trimmedKey;
         m_serverUrl = serverUrl;
         m_validationInterval = interval;
         m_lastValidation = 0;
@@ -98,6 +103,8 @@ public:
         m_accountNumber = IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN));
         m_accountName = AccountInfoString(ACCOUNT_NAME);
         m_serverName = AccountInfoString(ACCOUNT_SERVER);
+        
+        Print("🔧 Init Validator | Key: '", m_licenseKey, "' | URL: ", m_serverUrl);
     }
     
     bool Validate(bool forceValidation = false)
@@ -346,7 +353,12 @@ void CreateDashboard()
    // Si licence invalide, on arrête là
    if(!isLicenseValid)
    {
-       CreateLabel("Info", 15, 75, "Compte non autorisé", clrWhite, 9);
+       string errorReason = "Erreur inconnue";
+       if(CheckPointer(licenseValidator) != POINTER_INVALID)
+           errorReason = licenseValidator.GetErrorMessage();
+           
+       CreateLabel("Info", 15, 75, "❌ " + errorReason, clrWhite, 8);
+       CreateLabel("Info2", 15, 95, "Compte: " + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)), clrSilver, 8);
        ChartRedraw();
        return;
    }

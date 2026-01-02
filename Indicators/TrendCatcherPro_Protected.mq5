@@ -135,10 +135,15 @@ public:
         
         if(res == -1)
         {
+            int errorCode = GetLastError();
             m_isValid = false;
-            m_errorMessage = "Erreur connexion";
-            int err = GetLastError();
-            if(err == 4060) Print("❌ ERREUR: URL non autorisée dans MT5. Ajoutez: ", m_serverUrl);
+            m_errorMessage = StringFormat("Erreur Connexion (%d)", errorCode);
+            
+            if(errorCode == 4060)
+            {
+               m_errorMessage = "URL Non Autorisée (4060)";
+               Print("❌ ERREUR: URL non autorisée dans MT5. Ajoutez: ", m_serverUrl);
+            }
             return false;
         }
         

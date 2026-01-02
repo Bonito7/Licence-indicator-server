@@ -342,11 +342,15 @@
             
             adminSecret = val;
             
+            showMsg('loginError', 'Connexion en cours...', 'info'); // Feedback visuel
+
             // Test connection
-            fetch(`${API_URL}/stats`, { headers: { 'X-Admin-Secret': adminSecret } })
+            fetch(`${API_URL}/stats`, { 
+                headers: { 'X-Admin-Secret': adminSecret } 
+            })
             .then(res => {
                 if(res.status === 401) throw new Error('Clé incorrecte');
-                if(!res.ok) throw new Error('Erreur connexion');
+                if(!res.ok) throw new Error(`Erreur serveur: ${res.status}`);
                 return res.json();
             })
             .then(() => {
@@ -354,7 +358,10 @@
                 document.getElementById('mainSection').style.display = 'block';
                 loadLicenses();
             })
-            .catch(err => showMsg('loginError', err.message, 'error'));
+            .catch(err => {
+                console.error("Login failed:", err);
+                showMsg('loginError', `Erreur: ${err.message}. Vérifiez que le serveur est bien démarré.`, 'error');
+            });
         }
 
         function logout() {
